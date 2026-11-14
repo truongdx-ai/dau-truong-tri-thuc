@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+if git remote get-url origin >/dev/null 2>&1; then
+    if ! git fetch --quiet origin; then
+        echo "Cannot check the latest commit on origin. Retry after restoring access." >&2
+        exit 1
+    fi
+fi
+
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    timestamps=$(git log --all HEAD --format=%ct)
+else
+    timestamps=$(git log --all --format=%ct)
+fi
+
+last=$(printf '%s\n' "$timestamps" | awk '$1 > max { max = $1 } END { if (max) print max }')
+if [ -n "$last" ]; then
+    elapsed=$(( $(date +%s) - last ))
+    if [ "$elapsed" -lt 1800 ]; then
+        echo "Wait $((1800 - elapsed)) more second(s) before committing." >&2
+        exit 1
+    fi
+fi
