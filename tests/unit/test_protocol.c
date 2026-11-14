@@ -23,9 +23,21 @@ static void test_parse_rejects_malformed_fields(void) {
     }
 }
 
+static void test_format_frame_and_errors(void) {
+    char output[16];
+    const char *fields[] = {"200", "OK"};
+    TEST_ASSERT_EQUAL_INT(7, protocol_format(output, 8, fields, 2));
+    TEST_ASSERT_EQUAL_STRING("200|OK\n", output);
+    TEST_ASSERT_EQUAL_INT(-1, protocol_format(output, 7, fields, 2));
+    TEST_ASSERT_EQUAL_INT(-1, protocol_format(output, sizeof(output), fields, 0));
+    fields[1] = "O|K";
+    TEST_ASSERT_EQUAL_INT(-1, protocol_format(output, sizeof(output), fields, 2));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_parse_register);
     RUN_TEST(test_parse_rejects_malformed_fields);
+    RUN_TEST(test_format_frame_and_errors);
     return UNITY_END();
 }
