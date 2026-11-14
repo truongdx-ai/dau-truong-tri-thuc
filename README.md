@@ -1,8 +1,8 @@
 # Đấu trường tri thức
 
 Dự án môn Lập trình mạng mô phỏng gameshow nhiều người chơi bằng C11 trên Linux.
-Khung Tuần 0 có hai chương trình dòng lệnh và một unit test Unity. Khi chạy,
-mỗi chương trình in tên dự án và vai trò rồi thoát.
+Server TCP hiện nhận kết nối IPv4 tại `127.0.0.1` và hỗ trợ lệnh `PING`.
+Client dòng lệnh đang ở mức khung.
 
 ## Build và kiểm thử trên Ubuntu hoặc WSL
 
@@ -10,13 +10,16 @@ mỗi chương trình in tên dự án và vai trò rồi thoát.
 sudo apt update
 sudo apt install -y git build-essential gcovr valgrind clang-format libssl-dev
 make all
-./build/server
 ./build/client
 make test
 make coverage
 make valgrind
 make format-check
 ```
+
+Để thử server, chạy `./build/server -p 5500` trong một terminal WSL.
+Trong terminal thứ hai, chạy `nc 127.0.0.1 5500`, nhập `PING` và nhấn Enter.
+Server trả về `PONG`. Nhấn Ctrl+C trong terminal của server để dừng.
 
 `make coverage` tạo báo cáo tại `coverage/index.html`. Gcovr đo số dòng
 được chạy trong mã nguồn dự án, loại trừ các tệp `main.c` dành cho điểm vào
