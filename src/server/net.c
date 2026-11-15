@@ -1,5 +1,7 @@
 #include "net.h"
+#include "account.h"
 #include "linebuf.h"
+#include "log.h"
 #include "protocol.h"
 
 #include <errno.h>
@@ -63,7 +65,25 @@ static void accept_client(int listener, struct pollfd *fds, Client *clients) {
 
 static int retryable(void) { return errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK; }
 
-static void respond(Client *client, LinebufResult result) {
+static void register_user(const ProtocolMessage *message, const NetConfig *config,
+                          const char *fields[]) {
+    AccountResult result = ACCOUNT_INVALID;
+    if (message->count == 3) {
+        result = account_register(config->users_path, message->fields[1], message->fields[2]);
+    }
+    const char *codes[] = {"200", "400", "409", "500"};
+    const char *replies[] = {"OK", "BAD_REQUEST", "USER_EXISTS", "STORAGE_ERROR"};
+    const char *events[] = {"REGISTER accepted", "REGISTER invalid", "REGISTER duplicate",
+                            "REGISTER storage error"};
+    const LogLevel levels[] = {LOG_INFO, LOG_WARN, LOG_WARN, LOG_ERROR};
+    fields[0] = codes[result];
+    fields[1] = replies[result];
+    if (log_event(config->log, levels[result], events[result]) < 0) {
+        fputs("Could not write registration log\n", stderr);
+    }
+}
+
+static void respond(Client *client, LinebufResult result, const NetConfig *config) {
     ProtocolMessage message;
     const char *fields[] = {"400", "BAD_REQUEST"};
     size_t count = 2;
@@ -72,6 +92,8 @@ static void respond(Client *client, LinebufResult result) {
             if (message.count == 1 && strcmp(message.fields[0], "PING") == 0) {
                 fields[0] = "PONG";
                 count = 1;
+            } else if (strcmp(message.fields[0], "REGISTER") == 0) {
+                register_user(&message, config, fields);
             } else {
                 fields[1] = "UNSUPPORTED_COMMAND";
             }
@@ -82,7 +104,7 @@ static void respond(Client *client, LinebufResult result) {
     client->sent = 0;
 }
 
-static int service(struct pollfd *fd, Client *client) {
+static int service(struct pollfd *fd, Client *client, const NetConfig *config) {
     if (fd->revents & (POLLERR | POLLNVAL)) {
         return -1;
     }
@@ -108,7 +130,7 @@ static int service(struct pollfd *fd, Client *client) {
     }
     LinebufResult result = linebuf_feed(&client->input, byte);
     if (result != LINEBUF_MORE) {
-        respond(client, result);
+        respond(client, result, config);
         fd->events = POLLOUT;
     }
     if (byte == '\n') {
@@ -117,7 +139,7 @@ static int service(struct pollfd *fd, Client *client) {
     return 0;
 }
 
-int net_run(int listener, const volatile sig_atomic_t *stop) {
+int net_run(int listener, const volatile sig_atomic_t *stop, const NetConfig *config) {
     struct pollfd fds[MAX_CLIENTS + 1];
     Client clients[MAX_CLIENTS];
     fds[0] = (struct pollfd){.fd = listener, .events = POLLIN};
@@ -138,7 +160,7 @@ int net_run(int listener, const volatile sig_atomic_t *stop) {
             break;
         }
         for (size_t i = 1; i <= MAX_CLIENTS; ++i) {
-            if (fds[i].fd >= 0 && fds[i].revents && service(&fds[i], &clients[i - 1]) < 0) {
+            if (fds[i].fd >= 0 && fds[i].revents && service(&fds[i], &clients[i - 1], config) < 0) {
                 close(fds[i].fd);
                 fds[i].fd = -1;
             }

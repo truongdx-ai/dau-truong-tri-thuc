@@ -6,9 +6,12 @@ tính cả ký tự kết thúc dòng. Các trường phân cách bằng dấu |
 được rỗng hoặc chứa dấu |, CR, LF hay byte NUL. Một lần đọc TCP có thể trả
 về một phần dòng hoặc nhiều dòng.
 
-Server hiện lắng nghe tại 127.0.0.1 và hỗ trợ PING → PONG. Dòng sai định
+Server hiện lắng nghe tại 127.0.0.1 và hỗ trợ PING → PONG và REGISTER. Dòng sai định
 dạng nhận 400|BAD_REQUEST. Lệnh đúng định dạng nhưng chưa hỗ trợ nhận
 400|UNSUPPORTED_COMMAND. Các lệnh và sự kiện còn lại dưới đây là đặc tả dự kiến.
+Tên đăng ký có 1–32 ký tự ASCII trong tập chữ cái, chữ số, dấu gạch dưới
+và dấu gạch ngang. Mật khẩu có 1–128 byte. Lỗi ghi cơ sở dữ liệu khi đăng
+ký trả về `500|STORAGE_ERROR`.
 
 ## Lệnh từ client
 
