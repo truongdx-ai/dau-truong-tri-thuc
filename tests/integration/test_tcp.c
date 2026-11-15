@@ -15,6 +15,9 @@ static volatile sig_atomic_t stopped;
 static pid_t server;
 static int listener = -1;
 static int peer = -1;
+static char data_dir[] = "/tmp/dttt-tcp-XXXXXX";
+static char users_path[128];
+static FILE *events;
 
 static void stop(int signal_number) {
     (void)signal_number;
@@ -38,6 +41,18 @@ void tearDown(void) {
         while (waitpid(server, &status, 0) < 0 && errno == EINTR) {
         }
         server = 0;
+    }
+    if (events != NULL) {
+        fclose(events);
+        events = NULL;
+    }
+    if (users_path[0] != '\0') {
+        char lock[sizeof(users_path) + 5];
+        snprintf(lock, sizeof(lock), "%s.lock", users_path);
+        unlink(lock);
+        unlink(users_path);
+        rmdir(data_dir);
+        users_path[0] = '\0';
     }
 }
 
@@ -66,6 +81,10 @@ static void expect(const char *expected) {
 }
 
 static void test_server_handles_stream_and_recovers(void) {
+    TEST_ASSERT_NOT_NULL(mkdtemp(data_dir));
+    snprintf(users_path, sizeof(users_path), "%s/users.db", data_dir);
+    events = tmpfile();
+    TEST_ASSERT_NOT_NULL(events);
     listener = net_listen(0);
     TEST_ASSERT_TRUE(listener >= 0);
     struct sockaddr_in address;
@@ -79,7 +98,8 @@ static void test_server_handles_stream_and_recovers(void) {
         struct sigaction action = {.sa_handler = stop};
         sigemptyset(&action.sa_mask);
         sigaction(SIGTERM, &action, NULL);
-        int result = net_run(listener, &stopped);
+        NetConfig config = {.users_path = users_path, .log = events};
+        int result = net_run(listener, &stopped, &config);
         close(listener);
         exit(result == 0 ? 0 : 1);
     }
@@ -90,7 +110,7 @@ static void test_server_handles_stream_and_recovers(void) {
     TEST_ASSERT_EQUAL_INT(0, setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
     TEST_ASSERT_EQUAL_INT(0, connect(peer, (struct sockaddr *)&address, length));
     send_all("PI", 2);
-    const char batch[] = "NG\r\nPING\nREGISTER|a|b\nPING\0junk\n";
+    const char batch[] = "NG\r\nPING\nLOGIN|a|b\nPING\0junk\n";
     send_all(batch, sizeof(batch) - 1);
     expect("PONG\nPONG\n400|UNSUPPORTED_COMMAND\n400|BAD_REQUEST\n");
     char oversized[LINEBUF_MAX];
@@ -98,6 +118,23 @@ static void test_server_handles_stream_and_recovers(void) {
     send_all(oversized, sizeof(oversized));
     send_all("\nPING\n", 6);
     expect("400|BAD_REQUEST\nPONG\n");
+    const char registration[] = "REGISTER|an|123\nREGISTER|an|secret\nREGISTER|an\n";
+    send_all(registration, sizeof(registration) - 1);
+    expect("200|OK\n409|USER_EXISTS\n400|BAD_REQUEST\n");
+    FILE *db = fopen(users_path, "r");
+    TEST_ASSERT_NOT_NULL(db);
+    char entry[256];
+    char *read = fgets(entry, sizeof(entry), db);
+    fclose(db);
+    TEST_ASSERT_NOT_NULL(read);
+    TEST_ASSERT_EQUAL_STRING_LEN("an|pbkdf2-sha256|", entry, 17);
+    rewind(events);
+    char event[128];
+    TEST_ASSERT_NOT_NULL(fgets(event, sizeof(event), events));
+    TEST_ASSERT_NOT_NULL(strstr(event, "[INFO] REGISTER accepted"));
+    TEST_ASSERT_NOT_NULL(fgets(event, sizeof(event), events));
+    TEST_ASSERT_NOT_NULL(strstr(event, "[WARN] REGISTER duplicate"));
+    TEST_ASSERT_NULL(strstr(event, "secret"));
     TEST_ASSERT_EQUAL_INT(0, shutdown(peer, SHUT_WR));
     char byte;
     TEST_ASSERT_EQUAL_INT(0, recv(peer, &byte, 1, 0));
@@ -109,7 +146,8 @@ static void test_server_reports_invalid_listener(void) {
     int invalid = listener;
     close(listener);
     listener = -1;
-    TEST_ASSERT_EQUAL_INT(-1, net_run(invalid, &stopped));
+    NetConfig config = {0};
+    TEST_ASSERT_EQUAL_INT(-1, net_run(invalid, &stopped, &config));
 }
 
 int main(void) {

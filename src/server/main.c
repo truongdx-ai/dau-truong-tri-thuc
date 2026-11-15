@@ -1,5 +1,7 @@
 #include "net.h"
+#include "question.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,19 +14,73 @@ static void stop(int signal_number) {
     stopped = 1;
 }
 
+static int load_questions(const char *path) {
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        perror(path);
+        return -1;
+    }
+    Question *questions = calloc(QUESTION_MAX_COUNT, sizeof(*questions));
+    size_t count;
+    int result =
+        questions == NULL ? -1 : question_load(file, questions, QUESTION_MAX_COUNT, &count);
+    fclose(file);
+    free(questions);
+    if (result < 0) {
+        fprintf(stderr, "Could not load questions from %s\n", path);
+    }
+    return result;
+}
+
+static int run_server(uint16_t port, const char *directory) {
+    char users[PATH_MAX], questions[PATH_MAX], logs[PATH_MAX];
+    if (snprintf(users, sizeof(users), "%s/users.db", directory) >= (int)sizeof(users) ||
+        snprintf(questions, sizeof(questions), "%s/questions.txt", directory) >=
+            (int)sizeof(questions) ||
+        snprintf(logs, sizeof(logs), "%s/server.log", directory) >= (int)sizeof(logs)) {
+        fputs("Data directory path is too long\n", stderr);
+        return EXIT_FAILURE;
+    }
+    if (load_questions(questions) < 0) {
+        return EXIT_FAILURE;
+    }
+    FILE *log = fopen(logs, "a");
+    if (log == NULL) {
+        perror(logs);
+        return EXIT_FAILURE;
+    }
+    int fd = net_listen(port);
+    int result = -1;
+    if (fd < 0) {
+        perror("listen");
+    } else {
+        NetConfig config = {.users_path = users, .log = log};
+        result = net_run(fd, &stopped, &config);
+        close(fd);
+    }
+    fclose(log);
+    return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 int main(int argc, char **argv) {
     long port = 5500;
-    if (argc == 3 && strcmp(argv[1], "-p") == 0) {
-        char *end;
-        port = strtol(argv[2], &end, 10);
-        if (*end != '\0' || port < 1 || port > UINT16_MAX) {
-            port = -1;
+    const char *directory = "data";
+    int option;
+    while ((option = getopt(argc, argv, "p:d:")) != -1) {
+        if (option == 'p') {
+            char *end;
+            port = strtol(optarg, &end, 10);
+            if (*end != '\0') {
+                port = -1;
+            }
+        } else if (option == 'd') {
+            directory = optarg;
+        } else {
+            return EXIT_FAILURE;
         }
-    } else if (argc != 1) {
-        port = -1;
     }
-    if (port < 0) {
-        fprintf(stderr, "Usage: %s [-p PORT]\n", argv[0]);
+    if (port < 1 || port > UINT16_MAX || optind != argc || directory[0] == '\0') {
+        fprintf(stderr, "Usage: %s [-p PORT] [-d DATA_DIR]\n", argv[0]);
         return EXIT_FAILURE;
     }
     struct sigaction action = {.sa_handler = stop};
@@ -33,12 +89,5 @@ int main(int argc, char **argv) {
         perror("sigaction");
         return EXIT_FAILURE;
     }
-    int fd = net_listen((uint16_t)port);
-    if (fd < 0) {
-        perror("listen");
-        return EXIT_FAILURE;
-    }
-    int status = net_run(fd, &stopped);
-    close(fd);
-    return status == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    return run_server((uint16_t)port, directory);
 }
