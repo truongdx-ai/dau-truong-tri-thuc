@@ -18,7 +18,7 @@ COVERAGE_MIN ?= 90
 all: $(BUILD_DIR)/server $(BUILD_DIR)/client
 
 $(BUILD_DIR)/server: $(SERVER_SOURCES:%.c=$(BUILD_DIR)/%.o)
-	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -lcrypto -o $@
 
 $(BUILD_DIR)/client: $(CLIENT_SOURCES:%.c=$(BUILD_DIR)/%.o)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
@@ -30,7 +30,7 @@ $(BUILD_DIR)/%.o: %.c
 $(BUILD_DIR)/tests/%.o: CPPFLAGS += -I$(UNITY_DIR)
 
 $(TEST_BINS): %: %.o $(TEST_SUPPORT:%.c=$(BUILD_DIR)/%.o) $(BUILD_DIR)/$(UNITY_DIR)/unity.o
-	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -lcrypto -o $@
 
 test: $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done

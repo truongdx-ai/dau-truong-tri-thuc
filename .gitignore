@@ -58,5 +58,7 @@ dkms.conf
 /build/
 /coverage/
 /data/users.db
+/data/users.db.lock
+/data/users.db.tmp.*
 *.log
 /Ke_hoach_du_an_Dau_truong_tri_thuc.docx
