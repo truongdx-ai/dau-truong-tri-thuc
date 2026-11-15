@@ -1,0 +1,5 @@
+2 + 2 bằng bao nhiêu?|1|2|3|4|D
+Thủ đô Việt Nam là thành phố nào?|Huế|Hà Nội|Đà Nẵng|Cần Thơ|B
+Giao thức nào cung cấp luồng byte có thứ tự?|TCP|UDP|ICMP|ARP|A
+Một byte thông thường có bao nhiêu bit?|4|8|16|32|B
+Hành tinh nào gần Mặt Trời nhất?|Sao Kim|Sao Hỏa|Sao Thủy|Sao Mộc|C
