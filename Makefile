@@ -36,6 +36,7 @@ test: $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done
 
 coverage:
+	@if test -d build/coverage; then find build/coverage -type f -name '*.gcda' -delete; fi
 	$(MAKE) BUILD_DIR=build/coverage CFLAGS='$(CFLAGS) --coverage' LDFLAGS='$(LDFLAGS) --coverage' test
 	@mkdir -p coverage
 	gcovr -r . --filter 'src/' --exclude 'src/.*/main\.c$$' \

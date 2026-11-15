@@ -100,13 +100,15 @@ static void test_server_handles_stream_and_recovers(void) {
         sigaction(SIGTERM, &action, NULL);
         NetConfig config = {.users_path = users_path, .log = events};
         int result = net_run(listener, &stopped, &config);
+        fclose(events);
         close(listener);
         exit(result == 0 ? 0 : 1);
     }
 
     peer = socket(AF_INET, SOCK_STREAM, 0);
     TEST_ASSERT_TRUE(peer >= 0);
-    struct timeval timeout = {.tv_sec = 2};
+    /* PBKDF2 runs inside the server process under Valgrind too. */
+    struct timeval timeout = {.tv_sec = 15};
     TEST_ASSERT_EQUAL_INT(0, setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
     TEST_ASSERT_EQUAL_INT(0, connect(peer, (struct sockaddr *)&address, length));
     send_all("PI", 2);
