@@ -8,6 +8,8 @@
 typedef struct {
     const char *users_path;
     FILE *log;
+    int64_t (*now_ms)(void);
+    int64_t idle_timeout_ms;
 } NetConfig;
 
 int net_listen(uint16_t port);

@@ -1,4 +1,4 @@
-# Giao thức Đấu trường tri thức v0.1
+# Giao thức Đấu trường tri thức v0.2
 
 Server và client trao đổi qua TCP. Mỗi thông điệp là một dòng kết thúc bằng
 LF (\n), có thể kèm CR trước LF khi nhập từ terminal. Giới hạn là 1024 byte
@@ -6,9 +6,11 @@ tính cả ký tự kết thúc dòng. Các trường phân cách bằng dấu |
 được rỗng hoặc chứa dấu |, CR, LF hay byte NUL. Một lần đọc TCP có thể trả
 về một phần dòng hoặc nhiều dòng.
 
-Server hiện lắng nghe tại 127.0.0.1 và hỗ trợ PING → PONG và REGISTER. Dòng sai định
+Server hiện lắng nghe tại 127.0.0.1 và hỗ trợ PING, REGISTER, LOGIN, LOGOUT,
+JOIN, LEAVE và START. Dòng sai định
 dạng nhận 400|BAD_REQUEST. Lệnh đúng định dạng nhưng chưa hỗ trợ nhận
-400|UNSUPPORTED_COMMAND. Các lệnh và sự kiện còn lại dưới đây là đặc tả dự kiến.
+400|UNSUPPORTED_COMMAND. ANSWER, SKIP và các sự kiện vòng chơi bên dưới
+thuộc đặc tả cho giai đoạn tiếp theo.
 Tên đăng ký có 1–32 ký tự ASCII trong tập chữ cái, chữ số, dấu gạch dưới
 và dấu gạch ngang. Mật khẩu có 1–128 byte. Lỗi ghi cơ sở dữ liệu khi đăng
 ký trả về `500|STORAGE_ERROR`.
@@ -23,6 +25,7 @@ phía client và 5xx báo lỗi phía server.
 | `REGISTER\|user\|pass` | `200\|OK`, `409\|USER_EXISTS`, `400\|BAD_REQUEST` |
 | `LOGIN\|user\|pass` | `200\|OK`, `401\|WRONG_CREDENTIAL`, `409\|ALREADY_LOGGED_IN` |
 | LOGOUT | 200 OK |
+| LEAVE | 200 OK |
 | JOIN | 200 OK, 503 ROOM_FULL, 409 GAME_RUNNING |
 | START | 200 OK, 403 NOT_HOST, 412 NOT_ENOUGH_PLAYERS |
 | ANSWER với qid và đáp án A–D | 200 RECEIVED, 408 TIMEOUT, 403 NOT_ALLOWED |
@@ -51,3 +54,27 @@ PLAYERS được gửi khi danh sách phòng chờ thay đổi. QUESTION có lo�
 hoặc TURN và trường số giây dành cho người nhận. ROLE được gửi sau vòng
 loại hoặc khi đổi người chơi chính. TURN_RESULT chứa đáp án đúng, trạng
 thái CORRECT hoặc WRONG và điểm của người nhận.
+
+## Phiên và phòng chờ
+
+JOIN, LEAVE, START và LOGOUT yêu cầu đăng nhập. Thiếu phiên nhận
+`401|LOGIN_REQUIRED`. LOGIN sai tài khoản hoặc mật khẩu nhận
+`401|WRONG_CREDENTIAL`. Một tài khoản chỉ đăng nhập trên một kết nối.
+LOGIN khi kết nối đã đăng nhập cũng nhận `409|ALREADY_LOGGED_IN`.
+Lỗi đọc dữ liệu tài khoản trả về `500|STORAGE_ERROR`.
+
+Phiên hết hạn sau 300 giây không có lệnh hợp lệ được nhận. Client gửi
+PING mỗi 60 giây. Hết hạn hoặc mất kết nối sẽ rời phòng và giải phóng
+tên đăng nhập. LEAVE chỉ rời phòng. LOGOUT rời phòng và xoá phiên.
+JOIN lặp lại giữ nguyên thứ tự tham gia. Host là người JOIN sớm nhất
+còn ở phòng. START yêu cầu host và ít nhất hai người, chuyển phòng
+sang trạng thái đang chơi. JOIN và START tiếp theo nhận 409 GAME_RUNNING.
+Phòng quay về trạng thái chờ khi không còn thành viên.
+
+Server giới hạn 100 kết nối đồng thời. Kết nối vượt mức được đóng.
+PLAYERS liệt kê theo khe kết nối và có thể khác thứ tự JOIN.
+Khi danh sách vượt giới hạn 1024 byte, server gửi PLAYERS_BEGIN,
+một hoặc nhiều dòng PLAYERS_PART với các tên cách nhau bằng dấu phẩy,
+rồi PLAYERS_END. Client ghép các phần giữa hai mốc để lấy danh sách đầy đủ.
+Mỗi thông điệp vẫn tuân theo giới hạn 1024 byte. Các tên tài khoản có độ
+dài tối đa được hỗ trợ cho đủ 100 người.
