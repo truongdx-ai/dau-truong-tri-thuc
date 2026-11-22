@@ -65,6 +65,11 @@ static int receive_lines(int fd, Linebuf *buffer) {
 static int read_input(char *output, size_t *length, Linebuf *input, int *invalid) {
     char byte;
     ssize_t n = read(STDIN_FILENO, &byte, 1);
+    if (n == 0 && input->length > 0 && !input->discarding) {
+        /* Flush the last complete command when a pipe ends without LF. */
+        byte = '\n';
+        n = 1;
+    }
     if (n <= 0) {
         return n < 0 && errno == EINTR ? 1 : (int)n;
     }
