@@ -273,6 +273,57 @@ static void test_new_round_rotates_question_and_rejects_stale_id(void) {
     TEST_ASSERT_EQUAL_STRING("200|RECEIVED\nROLE|SUB|an\n", received[1]);
 }
 
+static int64_t completion_time;
+static int clock_calls;
+
+static int64_t completed_clock(void) {
+    ++clock_calls;
+    return completion_time;
+}
+
+static void test_idle_timeout_starts_after_command_processing(void) {
+    TEST_ASSERT_EQUAL_INT(0, session_login(&server.lobby, 0, "an", 0));
+    config.now_ms = completed_clock;
+    completion_time = 2000;
+    clock_calls = 0;
+    send_command(0, "PING", 1000);
+    TEST_ASSERT_EQUAL_STRING("PONG\n", received[0]);
+    TEST_ASSERT_EQUAL_INT64(2000, server.lobby.sessions[0].last_active);
+    TEST_ASSERT_FALSE(session_expired(&server.lobby.sessions[0], 2199, 200));
+    TEST_ASSERT_TRUE(session_expired(&server.lobby.sessions[0], 2200, 200));
+    TEST_ASSERT_EQUAL_INT(1, clock_calls);
+    send_command(0, "UNKNOWN", 2100);
+    TEST_ASSERT_EQUAL_INT64(2000, server.lobby.sessions[0].last_active);
+    TEST_ASSERT_EQUAL_INT(1, clock_calls);
+}
+
+static void test_completion_clock_does_not_change_answer_receipt_or_deadline(void) {
+    prepare_qualification();
+    config.now_ms = completed_clock;
+    completion_time = 5000;
+    send_command(0, "ANSWER|1|D", 1100);
+    TEST_ASSERT_EQUAL_STRING("200|RECEIVED\n", received[0]);
+    TEST_ASSERT_EQUAL_INT64(1100, server.qualification.players[0].received_at);
+    TEST_ASSERT_EQUAL_INT64(2000, server.qualification.deadline);
+    TEST_ASSERT_EQUAL_INT64(5000, server.lobby.sessions[0].last_active);
+    dispatcher_tick(&server, 5000);
+    TEST_ASSERT_EQUAL_INT(0, server.qualification.main_slot);
+}
+
+static void test_failed_or_backward_completion_clock_keeps_receipt_time(void) {
+    TEST_ASSERT_EQUAL_INT(0, session_login(&server.lobby, 0, "an", 0));
+    config.now_ms = completed_clock;
+    completion_time = -1;
+    send_command(0, "PING", 1000);
+    TEST_ASSERT_EQUAL_INT64(1000, server.lobby.sessions[0].last_active);
+    completion_time = 500;
+    send_command(0, "PING", 1100);
+    TEST_ASSERT_EQUAL_INT64(1100, server.lobby.sessions[0].last_active);
+    send_command(0, "LOGOUT", 1200);
+    TEST_ASSERT_EQUAL_STRING("", server.lobby.sessions[0].username);
+    TEST_ASSERT_EQUAL_INT64(0, server.lobby.sessions[0].last_active);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_validation_and_authorization);
@@ -287,5 +338,8 @@ int main(void) {
     RUN_TEST(test_leave_logout_and_disconnect_finish_pending_round);
     RUN_TEST(test_selected_main_disconnect_promotes_remaining_correct_player);
     RUN_TEST(test_new_round_rotates_question_and_rejects_stale_id);
+    RUN_TEST(test_idle_timeout_starts_after_command_processing);
+    RUN_TEST(test_completion_clock_does_not_change_answer_receipt_or_deadline);
+    RUN_TEST(test_failed_or_backward_completion_clock_keeps_receipt_time);
     return UNITY_END();
 }

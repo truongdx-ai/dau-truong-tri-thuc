@@ -10,6 +10,7 @@
 typedef struct {
     const char *users_path;
     FILE *log;
+    /* Monotonic clock; NULL selects CLOCK_MONOTONIC inside net_run. */
     int64_t (*now_ms)(void);
     int64_t idle_timeout_ms;
     /* Borrowed question bank; the caller keeps it alive during net_run. */
