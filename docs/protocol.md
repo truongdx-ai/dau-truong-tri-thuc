@@ -116,7 +116,10 @@ JOIN, LEAVE, START, ANSWER và LOGOUT yêu cầu đăng nhập. Thiếu phiên n
 LOGIN khi kết nối đã đăng nhập cũng nhận `409|ALREADY_LOGGED_IN`.
 Lỗi đọc dữ liệu tài khoản trả về `500|STORAGE_ERROR`.
 
-Phiên hết hạn sau 300 giây không có lệnh hợp lệ được nhận. Client gửi
+Phiên hết hạn sau 300 giây không hoạt động, tính từ khi xử lý xong lệnh
+hợp lệ gần nhất. Thời gian kiểm tra mật khẩu không bị tính là thời gian
+không hoạt động của chính kết nối đó. Thời điểm nhận ANSWER vẫn được ghi
+riêng lúc xử lý đủ dòng, không thay bằng thời điểm hoàn tất xử lý. Client gửi
 PING mỗi 60 giây. Hết hạn hoặc mất kết nối sẽ rời phòng và giải phóng
 tên đăng nhập. LEAVE chỉ rời phòng. LOGOUT rời phòng và xoá phiên.
 JOIN lặp lại giữ nguyên thứ tự tham gia. Host là người JOIN sớm nhất

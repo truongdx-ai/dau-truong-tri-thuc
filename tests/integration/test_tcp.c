@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 static volatile sig_atomic_t stopped;
@@ -153,6 +154,24 @@ static void test_server_reports_invalid_listener(void) {
     TEST_ASSERT_EQUAL_INT(-1, net_run(invalid, &stopped, &config));
 }
 
+static int64_t login_completion_clock(void) {
+    static int64_t completed_at = -1;
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) {
+        return -1;
+    }
+    int64_t elapsed = (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    if (completed_at < 0) {
+        if (ftell(events) == 0) {
+            return 0;
+        }
+        /* Simulate 1 second of authentication work once LOGIN has been logged.
+         * This exceeds the 200 ms idle limit even without running Valgrind. */
+        completed_at = elapsed;
+    }
+    return 1000 + elapsed - completed_at;
+}
+
 static void test_idle_session_closes_connection(void) {
     memcpy(data_dir, "/tmp/dttt-tcp-XXXXXX", sizeof(data_dir));
     TEST_ASSERT_NOT_NULL(mkdtemp(data_dir));
@@ -171,7 +190,10 @@ static void test_idle_session_closes_connection(void) {
         struct sigaction action = {.sa_handler = stop};
         sigemptyset(&action.sa_mask);
         sigaction(SIGTERM, &action, NULL);
-        NetConfig config = {.users_path = users_path, .log = events, .idle_timeout_ms = 200};
+        NetConfig config = {.users_path = users_path,
+                            .log = events,
+                            .now_ms = login_completion_clock,
+                            .idle_timeout_ms = 200};
         int result = net_run(listener, &stopped, &config);
         fclose(events);
         close(listener);

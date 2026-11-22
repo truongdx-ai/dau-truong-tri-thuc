@@ -270,6 +270,13 @@ int dispatcher_command(Dispatcher *server, size_t slot, char *line, int64_t now)
             broadcast_line(server, opening);
         }
     }
+    Session *session = &server->lobby.sessions[slot];
+    if (session->username[0] != '\0') {
+        /* CPU time spent verifying a password is not idle time. Keep the receipt
+         * timestamp above for answers, but start inactivity after processing. */
+        int64_t completed = server->config->now_ms != NULL ? server->config->now_ms() : now;
+        session->last_active = completed >= now ? completed : now;
+    }
     dispatcher_tick(server, now);
     return result;
 }

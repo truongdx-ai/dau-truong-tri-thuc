@@ -72,16 +72,15 @@ static int emit(void *context, size_t slot, const char *line) {
     return 0;
 }
 
-static int64_t now_ms(const NetConfig *config) {
-    if (config->now_ms != NULL) {
-        return config->now_ms();
-    }
+static int64_t monotonic_ms(void) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) {
         return -1;
     }
     return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
 }
+
+static int64_t now_ms(const NetConfig *config) { return config->now_ms(); }
 
 static int retryable(void) { return errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK; }
 
@@ -188,6 +187,12 @@ static void service_clients(Server *server, int64_t timeout) {
 }
 
 int net_run(int listener, const volatile sig_atomic_t *stop, const NetConfig *config) {
+    /* Share the same clock with command handling, including slow authentication. */
+    NetConfig runtime = *config;
+    if (runtime.now_ms == NULL) {
+        runtime.now_ms = monotonic_ms;
+    }
+    config = &runtime;
     Server *server = calloc(1, sizeof(*server));
     if (server == NULL) {
         return -1;
