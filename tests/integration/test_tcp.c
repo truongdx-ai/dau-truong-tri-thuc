@@ -1,3 +1,4 @@
+#include "account.h"
 #include "linebuf.h"
 #include "net.h"
 #include "unity.h"
@@ -112,7 +113,7 @@ static void test_server_handles_stream_and_recovers(void) {
     TEST_ASSERT_EQUAL_INT(0, setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
     TEST_ASSERT_EQUAL_INT(0, connect(peer, (struct sockaddr *)&address, length));
     send_all("PI", 2);
-    const char batch[] = "NG\r\nPING\nLOGIN|a|b\nPING\0junk\n";
+    const char batch[] = "NG\r\nPING\nUNKNOWN|a|b\nPING\0junk\n";
     send_all(batch, sizeof(batch) - 1);
     expect("PONG\nPONG\n400|UNSUPPORTED_COMMAND\n400|BAD_REQUEST\n");
     char oversized[LINEBUF_MAX];
@@ -135,7 +136,7 @@ static void test_server_handles_stream_and_recovers(void) {
     TEST_ASSERT_NOT_NULL(fgets(event, sizeof(event), events));
     TEST_ASSERT_NOT_NULL(strstr(event, "[INFO] REGISTER accepted"));
     TEST_ASSERT_NOT_NULL(fgets(event, sizeof(event), events));
-    TEST_ASSERT_NOT_NULL(strstr(event, "[WARN] REGISTER duplicate"));
+    TEST_ASSERT_NOT_NULL(strstr(event, "[INFO] REGISTER rejected"));
     TEST_ASSERT_NULL(strstr(event, "secret"));
     TEST_ASSERT_EQUAL_INT(0, shutdown(peer, SHUT_WR));
     char byte;
@@ -152,9 +153,45 @@ static void test_server_reports_invalid_listener(void) {
     TEST_ASSERT_EQUAL_INT(-1, net_run(invalid, &stopped, &config));
 }
 
+static void test_idle_session_closes_connection(void) {
+    memcpy(data_dir, "/tmp/dttt-tcp-XXXXXX", sizeof(data_dir));
+    TEST_ASSERT_NOT_NULL(mkdtemp(data_dir));
+    snprintf(users_path, sizeof(users_path), "%s/users.db", data_dir);
+    TEST_ASSERT_EQUAL(ACCOUNT_OK, account_register(users_path, "idle", "pw"));
+    events = tmpfile();
+    TEST_ASSERT_NOT_NULL(events);
+    listener = net_listen(0);
+    TEST_ASSERT_TRUE(listener >= 0);
+    struct sockaddr_in address;
+    socklen_t length = sizeof(address);
+    TEST_ASSERT_EQUAL_INT(0, getsockname(listener, (struct sockaddr *)&address, &length));
+    server = fork();
+    TEST_ASSERT_TRUE(server >= 0);
+    if (server == 0) {
+        struct sigaction action = {.sa_handler = stop};
+        sigemptyset(&action.sa_mask);
+        sigaction(SIGTERM, &action, NULL);
+        NetConfig config = {.users_path = users_path, .log = events, .idle_timeout_ms = 200};
+        int result = net_run(listener, &stopped, &config);
+        fclose(events);
+        close(listener);
+        exit(result == 0 ? 0 : 1);
+    }
+    peer = socket(AF_INET, SOCK_STREAM, 0);
+    TEST_ASSERT_TRUE(peer >= 0);
+    struct timeval timeout = {.tv_sec = 15};
+    TEST_ASSERT_EQUAL_INT(0, setsockopt(peer, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)));
+    TEST_ASSERT_EQUAL_INT(0, connect(peer, (struct sockaddr *)&address, length));
+    send_all("LOGIN|idle|pw\n", 14);
+    expect("200|OK\n");
+    char byte;
+    TEST_ASSERT_EQUAL_INT(0, recv(peer, &byte, 1, 0));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_server_handles_stream_and_recovers);
     RUN_TEST(test_server_reports_invalid_listener);
+    RUN_TEST(test_idle_session_closes_connection);
     return UNITY_END();
 }

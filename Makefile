@@ -32,8 +32,9 @@ $(BUILD_DIR)/tests/%.o: CPPFLAGS += -I$(UNITY_DIR)
 $(TEST_BINS): %: %.o $(TEST_SUPPORT:%.c=$(BUILD_DIR)/%.o) $(BUILD_DIR)/$(UNITY_DIR)/unity.o
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -lcrypto -o $@
 
-test: $(TEST_BINS)
+test: all $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done
+	python3 tests/integration/test_week2.py $(BUILD_DIR)
 
 coverage:
 	@if test -d build/coverage; then find build/coverage -type f -name '*.gcda' -delete; fi
