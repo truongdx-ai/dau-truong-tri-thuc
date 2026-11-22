@@ -34,7 +34,7 @@ Mỗi dòng có dạng `Câu hỏi|A|B|C|D|Đáp án đúng`, ví dụ
 của server và client. Tỉ lệ hiện tại chỉ phản ánh phần mã đã có.
 Unity v2.6.1 được lưu cùng giấy phép ở `third_party/unity/`.
 
-## Demo Tuần 2 với hai client
+## Demo phòng chờ và vòng mở màn với hai client
 
 Mở ba terminal WSL trong thư mục dự án. Terminal đầu chạy server:
 
@@ -62,7 +62,25 @@ JOIN
 Nếu tài khoản đã có, tiếp tục bằng LOGIN. Hai client đều nhận danh sách
 PLAYERS. Client đầu là host vì JOIN trước. Nhập START ở client thứ hai
 nhận 403 NOT_HOST, nhập START ở host nhận 200 OK và phòng chuyển sang
-trạng thái đang chơi. Mốc này chuẩn bị cho vòng loại trong Tuần 3.
+trạng thái đang chơi. Sau PLAYERS, cả hai client nhận cùng QUESTION loại
+QUALIFY, ví dụ với server vừa khởi động:
+
+```text
+QUESTION|1|QUALIFY|30|2 + 2 bằng bao nhiêu?|1|2|3|4
+```
+
+Trong 30 giây, nhập ANSWER|1|D ở client an trước, chờ 200|RECEIVED, rồi
+nhập ANSWER|1|A ở client tu. Client an nhận ROLE|MAIN, client tu nhận
+ROLE|SUB|an. Luôn thay 1 bằng qid thực tế trong QUESTION của ván đang chơi.
+Mỗi người chỉ được trả lời một lần; đáp án đúng nhanh nhất còn trong phòng
+được chọn khi thu đủ đáp án hoặc hết giờ. Server không gửi đáp án đúng
+trong QUESTION. Nếu không ai đúng, cả hai nhận GAME_OVER|NO_WINNER và
+host có thể START lại. Có thể thử không trả lời để kiểm tra hạn 30 giây.
+
+Thời hạn mở màn, xử lý đồng thời điểm, không trả lời, rời phòng và quay
+vòng bộ câu hỏi là quy ước triển khai, được ghi rõ trong docs/protocol.md.
+Phần này dừng ở việc chọn người chính; vòng TURN, chia điểm và SKIP sẽ
+được triển khai tiếp.
 
 LEAVE rời phòng và giữ phiên đăng nhập. LOGOUT xoá phiên và rời phòng.
 Mất kết nối hoặc không hoạt động trong 5 phút cũng xoá phiên. Client tự
@@ -75,7 +93,18 @@ client thực. Các test sử dụng thư mục dữ liệu tạm.
 Bộ test TCP còn kiểm tra giới hạn 100 kết nối, từ chối kết nối thứ 101,
 duy trì phản hồi cho các kết nối đang mở và tái sử dụng chỗ trống sau khi
 ngắt kết nối. Client được kiểm tra với đầu vào chứa NUL và lệnh cuối chưa
-có LF. Log ghi nhận LOGOUT, đóng phiên và hết hạn phiên.
+có LF. Log ghi nhận LOGOUT, đóng phiên, hết hạn phiên, nhận đáp án và kết
+quả chọn người chính.
+
+Các test vòng mở màn kiểm tra thứ tự đáp án, đồng thời điểm, trả lời lặp,
+sai qid, rời phòng, tái sử dụng khe và phát ROLE. Test TCP còn chờ đủ một
+vòng 30 giây không có đáp án để kiểm tra bộ đếm giờ tự chạy; vì vậy make
+test mất thêm khoảng 30 giây. Có thể chạy riêng bằng:
+
+```bash
+make all
+python3 tests/integration/test_qualification.py build
+```
 
 ## Hook kiểm tra khoảng cách commit
 

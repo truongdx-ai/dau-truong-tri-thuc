@@ -9,6 +9,7 @@ void ui_help(void) {
     puts("Vao phong     JOIN");
     puts("Roi phong     LEAVE");
     puts("Bat dau       START  (host, it nhat 2 nguoi)");
+    puts("Tra loi       ANSWER|qid|A  (A, B, C hoac D; qid trong QUESTION)");
     puts("Dang xuat     LOGOUT");
     puts("Thoat         Ctrl+D");
     puts("PLAYERS hien danh sach phong cho. Host la nguoi JOIN som nhat con trong phong.");

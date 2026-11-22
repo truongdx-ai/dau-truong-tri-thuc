@@ -14,19 +14,21 @@ static void stop(int signal_number) {
     stopped = 1;
 }
 
-static int load_questions(const char *path) {
+static int load_questions(const char *path, Question **questions, size_t *count) {
+    *questions = NULL;
+    *count = 0;
     FILE *file = fopen(path, "r");
     if (file == NULL) {
         perror(path);
         return -1;
     }
-    Question *questions = calloc(QUESTION_MAX_COUNT, sizeof(*questions));
-    size_t count;
+    *questions = calloc(QUESTION_MAX_COUNT, sizeof(**questions));
     int result =
-        questions == NULL ? -1 : question_load(file, questions, QUESTION_MAX_COUNT, &count);
+        *questions == NULL ? -1 : question_load(file, *questions, QUESTION_MAX_COUNT, count);
     fclose(file);
-    free(questions);
     if (result < 0) {
+        free(*questions);
+        *questions = NULL;
         fprintf(stderr, "Could not load questions from %s\n", path);
     }
     return result;
@@ -41,12 +43,15 @@ static int run_server(uint16_t port, const char *directory) {
         fputs("Data directory path is too long\n", stderr);
         return EXIT_FAILURE;
     }
-    if (load_questions(questions) < 0) {
+    Question *bank;
+    size_t question_count;
+    if (load_questions(questions, &bank, &question_count) < 0) {
         return EXIT_FAILURE;
     }
     FILE *log = fopen(logs, "a");
     if (log == NULL) {
         perror(logs);
+        free(bank);
         return EXIT_FAILURE;
     }
     int fd = net_listen(port);
@@ -54,11 +59,13 @@ static int run_server(uint16_t port, const char *directory) {
     if (fd < 0) {
         perror("listen");
     } else {
-        NetConfig config = {.users_path = users, .log = log};
+        NetConfig config = {
+            .users_path = users, .log = log, .questions = bank, .question_count = question_count};
         result = net_run(fd, &stopped, &config);
         close(fd);
     }
     fclose(log);
+    free(bank);
     return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

@@ -85,7 +85,7 @@ static int64_t now_ms(const NetConfig *config) {
 
 static int retryable(void) { return errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK; }
 
-static int receive_client(Server *server, size_t slot, int64_t now) {
+static int receive_client(Server *server, size_t slot) {
     Client *client = &server->clients[slot];
     char bytes[4096];
     ssize_t n = recv(server->fds[slot + 1].fd, bytes, sizeof(bytes), 0);
@@ -102,6 +102,11 @@ static int receive_client(Server *server, size_t slot, int64_t now) {
         if (result == LINEBUF_TOO_LONG || (result == LINEBUF_READY && client->invalid)) {
             emit(server, slot, "400|BAD_REQUEST\n");
         } else if (result == LINEBUF_READY) {
+            /* Timestamp each complete command when the server processes its final LF. */
+            int64_t now = now_ms(server->dispatcher.config);
+            if (now < 0) {
+                return -1;
+            }
             dispatcher_command(&server->dispatcher, slot, client->input.data, now);
         }
         if (bytes[i] == '\n') {
@@ -129,11 +134,11 @@ static int send_client(Server *server, size_t slot) {
     return 0;
 }
 
-static void disconnect_client(Server *server, size_t slot) {
+static void disconnect_client(Server *server, size_t slot, int64_t now) {
     close(server->fds[slot + 1].fd);
     server->fds[slot + 1].fd = -1;
     server->clients[slot] = (Client){0};
-    dispatcher_disconnect(&server->dispatcher, slot);
+    dispatcher_disconnect(&server->dispatcher, slot, now);
 }
 
 static void accept_client(Server *server) {
@@ -152,7 +157,7 @@ static void accept_client(Server *server) {
     close(fd);
 }
 
-static void service_clients(Server *server, int64_t now, int64_t timeout) {
+static void service_clients(Server *server, int64_t timeout) {
     for (size_t i = 0; i < SESSION_LIMIT; ++i) {
         struct pollfd *fd = &server->fds[i + 1];
         if (fd->fd < 0) {
@@ -164,14 +169,18 @@ static void service_clients(Server *server, int64_t now, int64_t timeout) {
             failed = send_client(server, i) < 0;
         }
         if (!failed && !client->eof && (fd->revents & (POLLIN | POLLHUP))) {
-            failed = receive_client(server, i, now) < 0;
+            failed = receive_client(server, i) < 0;
+        }
+        int64_t now = now_ms(server->dispatcher.config);
+        if (now < 0) {
+            failed = 1;
         }
         int expired = session_expired(&server->dispatcher.lobby.sessions[i], now, timeout);
         if (expired && log_event(server->dispatcher.config->log, LOG_INFO, "SESSION expired") < 0) {
             fputs("Could not write expiration log\n", stderr);
         }
         if (failed || (client->eof && client->length == 0) || expired) {
-            disconnect_client(server, i);
+            disconnect_client(server, i, now);
         } else if (client->eof) {
             fd->events &= ~POLLIN;
         }
@@ -191,11 +200,6 @@ int net_run(int listener, const volatile sig_atomic_t *stop, const NetConfig *co
     int result = 0;
     int64_t timeout = config->idle_timeout_ms > 0 ? config->idle_timeout_ms : SESSION_IDLE_MS;
     while (!*stop) {
-        int64_t now = now_ms(config);
-        if (now < 0) {
-            result = -1;
-            break;
-        }
         if (poll(server->fds, SESSION_LIMIT + 1, 100) < 0) {
             if (errno == EINTR) {
                 continue;
@@ -207,7 +211,13 @@ int net_run(int listener, const volatile sig_atomic_t *stop, const NetConfig *co
             result = -1;
             break;
         }
-        service_clients(server, now, timeout);
+        service_clients(server, timeout);
+        int64_t now = now_ms(config);
+        if (now < 0) {
+            result = -1;
+            break;
+        }
+        dispatcher_tick(&server->dispatcher, now);
         if (server->fds[0].revents & POLLIN) {
             accept_client(server);
         }

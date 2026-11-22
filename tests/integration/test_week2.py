@@ -30,6 +30,10 @@ class Peer:
 
 with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
     shutil.copyfile("data/questions.txt", Path(directory) / "questions.txt")
+    questions = [line for line in (Path(directory) / "questions.txt").read_text(
+        encoding="utf-8").splitlines() if line]
+    opening = "QUESTION|1|QUALIFY|30|" + "|".join(questions[0].split("|")[:5])
+    next_opening = "QUESTION|2|QUALIFY|30|" + "|".join(questions[1 % len(questions)].split("|")[:5])
     with socket.socket() as reserve:
         reserve.bind(("127.0.0.1", 0))
         port = reserve.getsockname()[1]
@@ -71,6 +75,11 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
         command(a, "START", "200|OK")
         a.expect("PLAYERS|2|an,tu")
         b.expect("PLAYERS|2|an,tu")
+        a.expect(opening)
+        b.expect(opening)
+        command(a, "START", "409|GAME_RUNNING")
+        command(a, "PING", "PONG")
+        command(b, "PING", "PONG")
         command(c, "JOIN", "401|LOGIN_REQUIRED")
         command(a, "LEAVE", "200|OK")
         b.expect("PLAYERS|1|tu")
@@ -108,6 +117,8 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
             assert client.stdout.readline().strip() == "200|OK"
             assert client.stdout.readline().strip() == "PLAYERS|2|tu,an"
             b.expect("PLAYERS|2|tu,an")
+            assert client.stdout.readline().strip() == next_opening
+            b.expect(next_opening)
             client.stdin.close()
             assert client.wait(timeout=5) == 0
         finally:
