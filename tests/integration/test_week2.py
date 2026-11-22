@@ -97,7 +97,7 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
         a.expect("")
         command(c, "LOGOUT", "200|OK")
         # Real CLI keeps receiving pushes while waiting for stdin.
-        client = subprocess.Popen([str(build / "client"), "-p", str(port)],
+        client = subprocess.Popen([str(build / "client"), "-r", "-p", str(port)],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, text=True)
         try:

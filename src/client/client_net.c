@@ -45,7 +45,7 @@ static int64_t monotonic_seconds(void) {
 
 static int transient(void) { return errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK; }
 
-static int receive_lines(int fd, Linebuf *buffer) {
+static int receive_lines(int fd, Linebuf *buffer, ClientUI *ui) {
     char bytes[4096];
     ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
     if (count <= 0) {
@@ -54,7 +54,7 @@ static int receive_lines(int fd, Linebuf *buffer) {
     for (ssize_t i = 0; i < count; ++i) {
         LinebufResult result = linebuf_feed(buffer, bytes[i]);
         if (result == LINEBUF_READY) {
-            ui_message(buffer->data);
+            ui_receive(ui, buffer->data, stdout);
         } else if (result == LINEBUF_TOO_LONG) {
             return -1;
         }
@@ -62,7 +62,7 @@ static int receive_lines(int fd, Linebuf *buffer) {
     return 1;
 }
 
-static int read_input(char *output, size_t *length, Linebuf *input, int *invalid) {
+static int read_input(char *output, size_t *length, Linebuf *input, int *invalid, ClientUI *ui) {
     char byte;
     ssize_t n = read(STDIN_FILENO, &byte, 1);
     if (n == 0 && input->length > 0 && !input->discarding) {
@@ -81,9 +81,12 @@ static int read_input(char *output, size_t *length, Linebuf *input, int *invalid
         if (*invalid) {
             ui_message("Lenh chua byte NUL, vui long nhap lai.");
         } else {
-            *length = strlen(input->data);
-            memcpy(output, input->data, *length);
-            output[(*length)++] = '\n';
+            int prepared = ui_prepare(ui, input->data, output, LINEBUF_MAX + 1, stdout);
+            if (prepared < 0) {
+                ui_message("Khong the tao lenh: vuot gioi han 1024 byte.");
+            } else {
+                *length = (size_t)prepared;
+            }
         }
     }
     if (byte == '\n') {
@@ -92,10 +95,11 @@ static int read_input(char *output, size_t *length, Linebuf *input, int *invalid
     return 1;
 }
 
-static int client_loop(int fd) {
+static int client_loop(int fd, int raw) {
     struct pollfd fds[] = {{.fd = fd, .events = POLLIN}, {.fd = STDIN_FILENO, .events = POLLIN}};
     Linebuf socket_input = {0}, input = {0};
-    char output[LINEBUF_MAX];
+    char output[LINEBUF_MAX + 1];
+    ClientUI ui = {.raw = raw};
     size_t length = 0, sent = 0;
     int eof = 0;
     int invalid = 0;
@@ -113,7 +117,7 @@ static int client_loop(int fd) {
             return -1;
         }
         if (fds[0].revents & (POLLIN | POLLHUP)) {
-            int result = receive_lines(fd, &socket_input);
+            int result = receive_lines(fd, &socket_input, &ui);
             if (result <= 0) {
                 return result;
             }
@@ -129,7 +133,7 @@ static int client_loop(int fd) {
         }
         if (!eof && length == sent && (fds[1].revents & (POLLIN | POLLHUP))) {
             length = sent = 0;
-            int result = read_input(output, &length, &input, &invalid);
+            int result = read_input(output, &length, &input, &invalid, &ui);
             if (result < 0) {
                 return -1;
             }
@@ -151,13 +155,13 @@ static int client_loop(int fd) {
     }
 }
 
-int client_run(const char *host, const char *port) {
+int client_run(const char *host, const char *port, int raw) {
     int fd = connect_server(host, port);
     if (fd < 0) {
         return -1;
     }
     ui_help();
-    int result = client_loop(fd);
+    int result = client_loop(fd, raw);
     close(fd);
     return result;
 }

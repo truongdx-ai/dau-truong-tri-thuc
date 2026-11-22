@@ -43,7 +43,9 @@ Mở ba terminal WSL trong thư mục dự án. Terminal đầu chạy server:
 ```
 
 Hai terminal còn lại đều chạy `./build/client -h 127.0.0.1 -p 5500`.
-Client hiện menu lệnh. Ở client đầu nhập lần lượt:
+Client hiện menu lệnh và thông báo dễ đọc. Các mã 200, 403, PLAYERS,
+QUESTION và ROLE bên dưới mô tả giao thức; thêm `-r` khi mở client nếu
+muốn xem nguyên dòng giao thức để đối chiếu. Ở client đầu nhập lần lượt:
 
 ```text
 REGISTER|an|123
@@ -69,9 +71,11 @@ QUALIFY, ví dụ với server vừa khởi động:
 QUESTION|1|QUALIFY|30|2 + 2 bằng bao nhiêu?|1|2|3|4
 ```
 
-Trong 30 giây, nhập ANSWER|1|D ở client an trước, chờ 200|RECEIVED, rồi
-nhập ANSWER|1|A ở client tu. Client an nhận ROLE|MAIN, client tu nhận
-ROLE|SUB|an. Luôn thay 1 bằng qid thực tế trong QUESTION của ván đang chơi.
+Trong 30 giây, nhập D ở client an trước, chờ thông báo server đã nhận đáp
+án, rồi nhập A ở client tu. Client an được thông báo là người chơi chính;
+client tu được thông báo người chơi chính là an. Client tự ghép qid vào
+ANSWER. Vẫn có thể nhập lệnh đầy đủ ANSWER|1|D để kiểm tra giao thức;
+khi đó phải thay 1 bằng qid thực tế của câu hỏi đang chơi.
 Mỗi người chỉ được trả lời một lần; đáp án đúng nhanh nhất còn trong phòng
 được chọn khi thu đủ đáp án hoặc hết giờ. Server không gửi đáp án đúng
 trong QUESTION. Nếu không ai đúng, cả hai nhận GAME_OVER|NO_WINNER và
@@ -81,6 +85,29 @@ Thời hạn mở màn, xử lý đồng thời điểm, không trả lời, r�
 vòng bộ câu hỏi là quy ước triển khai, được ghi rõ trong docs/protocol.md.
 Phần này dừng ở việc chọn người chính; vòng TURN, chia điểm và SKIP sẽ
 được triển khai tiếp.
+
+Client mặc định trình bày câu hỏi như sau:
+
+```text
+[Cau hoi #1 - Vong mo man]
+2 + 2 bằng bao nhiêu?
+A. 1
+B. 2
+C. 3
+D. 4
+Thoi gian: 30 giay. Nhap A/B/C/D roi nhan Enter.
+```
+
+Đáp án viết hoa hoặc thường đều được chấp nhận, kể cả có khoảng trắng
+hai bên. Client nhắc khi chưa có câu hỏi hoặc đã gửi đáp án; nhận ROLE,
+GAME_OVER hoặc gửi LEAVE/LOGOUT sẽ đóng phần nhập đáp án của câu hiện tại.
+Thời gian hiển thị là thời hạn do server công bố, không phải bộ đếm giảm
+dần trên client; server quyết định đáp án còn đúng hạn hay không.
+Các lệnh giao thức đầy đủ vẫn dùng được. Chế độ xem nguyên giao thức:
+
+```bash
+./build/client -r -h 127.0.0.1 -p 5500
+```
 
 LEAVE rời phòng và giữ phiên đăng nhập. LOGOUT xoá phiên và rời phòng.
 Mất kết nối hoặc không hoạt động trong 5 phút cũng xoá phiên. Client tự
@@ -104,6 +131,13 @@ test mất thêm khoảng 30 giây. Có thể chạy riêng bằng:
 ```bash
 make all
 python3 tests/integration/test_qualification.py build
+```
+
+Test riêng phần hiển thị và nhập đáp án của client (không phải chờ 30 giây):
+
+```bash
+make all
+python3 tests/integration/test_client_ui.py build
 ```
 
 ## Hook kiểm tra khoảng cách commit
