@@ -1,6 +1,7 @@
 #include "net.h"
 #include "dispatcher.h"
 #include "linebuf.h"
+#include "log.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -165,8 +166,11 @@ static void service_clients(Server *server, int64_t now, int64_t timeout) {
         if (!failed && !client->eof && (fd->revents & (POLLIN | POLLHUP))) {
             failed = receive_client(server, i, now) < 0;
         }
-        if (failed || (client->eof && client->length == 0) ||
-            session_expired(&server->dispatcher.lobby.sessions[i], now, timeout)) {
+        int expired = session_expired(&server->dispatcher.lobby.sessions[i], now, timeout);
+        if (expired && log_event(server->dispatcher.config->log, LOG_INFO, "SESSION expired") < 0) {
+            fputs("Could not write expiration log\n", stderr);
+        }
+        if (failed || (client->eof && client->length == 0) || expired) {
             disconnect_client(server, i);
         } else if (client->eof) {
             fd->events &= ~POLLIN;

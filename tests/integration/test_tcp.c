@@ -186,6 +186,13 @@ static void test_idle_session_closes_connection(void) {
     expect("200|OK\n");
     char byte;
     TEST_ASSERT_EQUAL_INT(0, recv(peer, &byte, 1, 0));
+    rewind(events);
+    char event[128];
+    int expired = 0;
+    while (fgets(event, sizeof(event), events) != NULL) {
+        expired |= strstr(event, "SESSION expired") != NULL;
+    }
+    TEST_ASSERT_TRUE(expired);
 }
 
 int main(void) {

@@ -119,6 +119,7 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
         b.expect("PLAYERS|1|an")
         log = (Path(directory) / "server.log").read_text()
         assert "LOGIN accepted" in log and "LOGIN rejected" in log
+        assert "LOGOUT accepted" in log and "SESSION closed" in log
         assert "123" not in log and "456" not in log
         print("Week 2 TCP and CLI scenarios passed")
     finally:

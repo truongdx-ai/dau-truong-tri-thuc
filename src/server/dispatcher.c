@@ -54,6 +54,11 @@ void dispatcher_broadcast(Dispatcher *server) {
 
 void dispatcher_disconnect(Dispatcher *server, size_t slot) {
     int joined = server->lobby.sessions[slot].joined;
+    if (server->lobby.sessions[slot].username[0] != '\0') {
+        if (log_event(server->config->log, LOG_INFO, "SESSION closed") < 0) {
+            fputs("Could not write session log\n", stderr);
+        }
+    }
     session_logout(&server->lobby, slot);
     if (joined) {
         dispatcher_broadcast(server);
@@ -135,7 +140,7 @@ int dispatcher_command(Dispatcher *server, size_t slot, char *line, int64_t now)
     }
     server->lobby.sessions[slot].last_active = now;
     reply = handle(server, slot, &message, now);
-    if (index < 2) {
+    if (index < 2 || index == 6) {
         char event[96];
         snprintf(event, sizeof(event), "%s %s", commands[index],
                  strcmp(reply, "200|OK\n") == 0 ? "accepted" : "rejected");
