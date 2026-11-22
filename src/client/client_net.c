@@ -62,19 +62,27 @@ static int receive_lines(int fd, Linebuf *buffer) {
     return 1;
 }
 
-static int read_input(char *output, size_t *length, Linebuf *input) {
+static int read_input(char *output, size_t *length, Linebuf *input, int *invalid) {
     char byte;
     ssize_t n = read(STDIN_FILENO, &byte, 1);
     if (n <= 0) {
         return n < 0 && errno == EINTR ? 1 : (int)n;
     }
+    *invalid |= byte == '\0';
     LinebufResult result = linebuf_feed(input, byte);
     if (result == LINEBUF_TOO_LONG) {
         ui_message("Lenh qua dai, toi da 1024 byte gom LF.");
     } else if (result == LINEBUF_READY) {
-        *length = strlen(input->data);
-        memcpy(output, input->data, *length);
-        output[(*length)++] = '\n';
+        if (*invalid) {
+            ui_message("Lenh chua byte NUL, vui long nhap lai.");
+        } else {
+            *length = strlen(input->data);
+            memcpy(output, input->data, *length);
+            output[(*length)++] = '\n';
+        }
+    }
+    if (byte == '\n') {
+        *invalid = 0;
     }
     return 1;
 }
@@ -85,6 +93,7 @@ static int client_loop(int fd) {
     char output[LINEBUF_MAX];
     size_t length = 0, sent = 0;
     int eof = 0;
+    int invalid = 0;
     int64_t last_ping = monotonic_seconds();
     for (;;) {
         fds[0].events = POLLIN | (length > sent ? POLLOUT : 0);
@@ -115,7 +124,7 @@ static int client_loop(int fd) {
         }
         if (!eof && length == sent && (fds[1].revents & (POLLIN | POLLHUP))) {
             length = sent = 0;
-            int result = read_input(output, &length, &input);
+            int result = read_input(output, &length, &input, &invalid);
             if (result < 0) {
                 return -1;
             }
