@@ -72,6 +72,11 @@ sớm nhất. Khi mọi người đã rời phòng, có thể JOIN để thử l
 `make test` chạy cả Unity và kịch bản TCP tự động với hai tài khoản cùng
 client thực. Các test sử dụng thư mục dữ liệu tạm.
 
+Bộ test TCP còn kiểm tra giới hạn 100 kết nối, từ chối kết nối thứ 101,
+duy trì phản hồi cho các kết nối đang mở và tái sử dụng chỗ trống sau khi
+ngắt kết nối. Client được kiểm tra với đầu vào chứa NUL và lệnh cuối chưa
+có LF. Log ghi nhận LOGOUT, đóng phiên và hết hạn phiên.
+
 ## Hook kiểm tra khoảng cách commit
 
 Chạy một lần trong mỗi bản sao repo:
