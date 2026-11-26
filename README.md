@@ -2,7 +2,7 @@
 
 Dự án môn Lập trình mạng mô phỏng gameshow nhiều người chơi bằng C11 trên Linux.
 Server TCP nhận kết nối IPv4 tại `127.0.0.1`, hỗ trợ đăng ký, đăng nhập,
-quản lý phiên và phòng chờ. Client CLI vừa nhận sự kiện từ server vừa đọc
+phòng chờ, vòng loại và lượt chơi có tính điểm. Client CLI vừa nhận sự kiện từ server vừa đọc
 lệnh người dùng bằng `poll()`.
 
 ## Build và kiểm thử trên Ubuntu hoặc WSL
@@ -61,8 +61,7 @@ JOIN
 
 Nếu tài khoản đã có, tiếp tục bằng LOGIN. Hai client đều nhận danh sách
 PLAYERS. Client đầu là host vì JOIN trước. Nhập START ở client thứ hai
-nhận 403 NOT_HOST, nhập START ở host nhận 200 OK và phòng chuyển sang
-trạng thái đang chơi. Mốc này chuẩn bị cho vòng loại trong Tuần 3.
+nhận 403 NOT_HOST. Nhập START ở host nhận 200 OK và câu hỏi vòng loại.
 
 LEAVE rời phòng và giữ phiên đăng nhập. LOGOUT xoá phiên và rời phòng.
 Mất kết nối hoặc không hoạt động trong 5 phút cũng xoá phiên. Client tự
@@ -76,6 +75,37 @@ Bộ test TCP còn kiểm tra giới hạn 100 kết nối, từ chối kết n�
 duy trì phản hồi cho các kết nối đang mở và tái sử dụng chỗ trống sau khi
 ngắt kết nối. Client được kiểm tra với đầu vào chứa NUL và lệnh cuối chưa
 có LF. Log ghi nhận LOGOUT, đóng phiên và hết hạn phiên.
+
+## Chơi một ván Tuần 3
+
+Mở server và ba client, đăng nhập bằng ba tài khoản khác nhau rồi JOIN.
+Người JOIN đầu tiên nhập START. Client hiển thị nội dung và bốn lựa chọn.
+Nhập `ANSWER|qid|A` hoặc B, C, D theo qid vừa nhận. Mỗi người được gửi
+một đáp án cho mỗi câu. MAIN được nhập `SKIP|qid` tối đa hai lần trong ván.
+
+Vòng loại cho mọi người 30 giây. Người đúng nhanh nhất thành MAIN. Nếu
+cùng mili giây, thứ tự server nhận dòng hoàn chỉnh quyết định. Không ai
+đúng thì hỏi câu mới, tối đa ba lần. Lượt chính cho SUB 30 giây và MAIN
+60 giây. Server đợi cửa sổ 30 giây đóng rồi mới tính điểm. MAIN chưa trả
+lời được đợi đến 60 giây. Đáp án đến đúng mốc hết hạn bị từ chối.
+
+Mỗi ván bắt đầu với 10 điểm. MAIN đúng nhận điểm của SUB sai. MAIN sai
+bị loại, điểm MAIN chia cho SUB đúng, người đúng nhanh nhất thành MAIN.
+SKIP chia phần nguyên một nửa điểm MAIN cùng điểm SUB sai cho SUB đúng.
+Điểm dư chia cho người đúng nhanh nhất. Không SUB nào đúng khi SKIP thì
+MAIN giữ điểm và thắng. MAIN sai mà không SUB nào đúng thì NO_WINNER.
+
+Các cách hiểu này theo giả định ở mục 2 của kế hoạch và còn cần xác nhận
+từ thầy. Chia đôi điểm lẻ thì MAIN giữ phần làm tròn lên. Hết câu hỏi,
+người sống sót có điểm cao nhất thắng, bằng điểm chọn khe kết nối nhỏ
+nhất. Ngân hàng câu hỏi được xáo khi server khởi động.
+
+TURN_RESULT, ELIMINATED và GAME_OVER thông báo kết quả. Sau GAME_OVER
+có thể START lại với điểm reset và qid mới. LEAVE, LOGOUT hoặc mất kết
+nối trong lượt được xử lý như trả lời sai.
+
+`make test` gồm đồng hồ giả cho 30/60 giây và kịch bản ba client qua
+TCP chạy một lượt 30 giây thật, vì vậy test và coverage cần thêm thời gian.
 
 ## Hook kiểm tra khoảng cách commit
 
