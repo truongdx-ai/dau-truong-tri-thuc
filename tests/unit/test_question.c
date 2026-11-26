@@ -46,9 +46,28 @@ static void test_reject_invalid_questions(void) {
     TEST_ASSERT_EQUAL_INT(-1, load(oversized, sizeof(oversized), &question, 1, &count));
 }
 
+static void test_shuffle_preserves_question_and_answer_pairs(void) {
+    Question questions[4] = {0};
+    for (size_t i = 0; i < 4; ++i) {
+        questions[i].text[0] = (char)('A' + i);
+        questions[i].answer = (char)('A' + i);
+    }
+    TEST_ASSERT_EQUAL_INT(0, question_shuffle(questions, 0));
+    TEST_ASSERT_EQUAL_INT(0, question_shuffle(questions, 1));
+    TEST_ASSERT_EQUAL_INT(-1, question_shuffle(questions, QUESTION_MAX_COUNT + 1));
+    TEST_ASSERT_EQUAL_INT(0, question_shuffle(questions, 4));
+    unsigned seen = 0;
+    for (size_t i = 0; i < 4; ++i) {
+        TEST_ASSERT_EQUAL_CHAR(questions[i].text[0], questions[i].answer);
+        seen |= 1U << (questions[i].answer - 'A');
+    }
+    TEST_ASSERT_EQUAL_UINT(15, seen);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_load_questions);
     RUN_TEST(test_reject_invalid_questions);
+    RUN_TEST(test_shuffle_preserves_question_and_answer_pairs);
     return UNITY_END();
 }

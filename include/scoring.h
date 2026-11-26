@@ -10,6 +10,7 @@ typedef struct {
     int responded;
     int departed;
     int64_t answered_at;
+    uint64_t answer_order;
     int64_t points;
     unsigned skips;
 } Player;

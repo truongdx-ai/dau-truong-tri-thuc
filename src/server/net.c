@@ -102,6 +102,10 @@ static int receive_client(Server *server, size_t slot, int64_t now) {
         if (result == LINEBUF_TOO_LONG || (result == LINEBUF_READY && client->invalid)) {
             emit(server, slot, "400|BAD_REQUEST\n");
         } else if (result == LINEBUF_READY) {
+            now = now_ms(server->dispatcher.config);
+            if (now < 0) {
+                return -1;
+            }
             dispatcher_command(&server->dispatcher, slot, client->input.data, now);
         }
         if (bytes[i] == '\n') {
@@ -196,7 +200,9 @@ int net_run(int listener, const volatile sig_atomic_t *stop, const NetConfig *co
             result = -1;
             break;
         }
-        if (poll(server->fds, SESSION_LIMIT + 1, 100) < 0) {
+        int game_timeout = game_poll_timeout(&server->dispatcher.game, now);
+        int poll_timeout = game_timeout >= 0 && game_timeout < 100 ? game_timeout : 100;
+        if (poll(server->fds, SESSION_LIMIT + 1, poll_timeout) < 0) {
             if (errno == EINTR) {
                 continue;
             }
@@ -207,7 +213,14 @@ int net_run(int listener, const volatile sig_atomic_t *stop, const NetConfig *co
             result = -1;
             break;
         }
+        now = now_ms(config);
+        if (now < 0) {
+            result = -1;
+            break;
+        }
+        server->dispatcher.now = now;
         service_clients(server, now, timeout);
+        dispatcher_tick(&server->dispatcher, now);
         if (server->fds[0].revents & POLLIN) {
             accept_client(server);
         }

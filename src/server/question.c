@@ -2,7 +2,29 @@
 #include "linebuf.h"
 #include "protocol.h"
 
+#include <openssl/rand.h>
+#include <stdint.h>
 #include <string.h>
+
+int question_shuffle(Question *questions, size_t count) {
+    if (count > QUESTION_MAX_COUNT) {
+        return -1;
+    }
+    for (size_t i = count; i > 1; --i) {
+        uint32_t random, bound = (uint32_t)i;
+        uint32_t threshold = (uint32_t)(-bound) % bound;
+        do {
+            if (RAND_bytes((unsigned char *)&random, sizeof(random)) != 1) {
+                return -1;
+            }
+        } while (random < threshold);
+        size_t index = random % bound;
+        Question temporary = questions[i - 1];
+        questions[i - 1] = questions[index];
+        questions[index] = temporary;
+    }
+    return 0;
+}
 
 static int parse_question(char *line, Question *question) {
     ProtocolMessage message;

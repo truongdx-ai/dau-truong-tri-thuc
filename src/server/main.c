@@ -14,22 +14,26 @@ static void stop(int signal_number) {
     stopped = 1;
 }
 
-static int load_questions(const char *path) {
+static Question *load_questions(const char *path, size_t *count) {
     FILE *file = fopen(path, "r");
     if (file == NULL) {
         perror(path);
-        return -1;
+        return NULL;
     }
     Question *questions = calloc(QUESTION_MAX_COUNT, sizeof(*questions));
-    size_t count;
-    int result =
-        questions == NULL ? -1 : question_load(file, questions, QUESTION_MAX_COUNT, &count);
+    int result = questions == NULL ? -1 : question_load(file, questions, QUESTION_MAX_COUNT, count);
     fclose(file);
-    free(questions);
     if (result < 0) {
         fprintf(stderr, "Could not load questions from %s\n", path);
+        free(questions);
+        return NULL;
     }
-    return result;
+    if (question_shuffle(questions, *count) < 0) {
+        fputs("Could not shuffle question bank\n", stderr);
+        free(questions);
+        return NULL;
+    }
+    return questions;
 }
 
 static int run_server(uint16_t port, const char *directory) {
@@ -41,12 +45,15 @@ static int run_server(uint16_t port, const char *directory) {
         fputs("Data directory path is too long\n", stderr);
         return EXIT_FAILURE;
     }
-    if (load_questions(questions) < 0) {
+    size_t question_count;
+    Question *bank = load_questions(questions, &question_count);
+    if (bank == NULL) {
         return EXIT_FAILURE;
     }
     FILE *log = fopen(logs, "a");
     if (log == NULL) {
         perror(logs);
+        free(bank);
         return EXIT_FAILURE;
     }
     int fd = net_listen(port);
@@ -54,11 +61,13 @@ static int run_server(uint16_t port, const char *directory) {
     if (fd < 0) {
         perror("listen");
     } else {
-        NetConfig config = {.users_path = users, .log = log};
+        NetConfig config = {
+            .users_path = users, .log = log, .questions = bank, .question_count = question_count};
         result = net_run(fd, &stopped, &config);
         close(fd);
     }
     fclose(log);
+    free(bank);
     return result == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 

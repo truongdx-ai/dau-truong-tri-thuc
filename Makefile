@@ -37,6 +37,7 @@ test: all $(TEST_BINS)
 	python3 tests/integration/test_week2.py $(BUILD_DIR)
 	python3 tests/integration/test_client_input.py $(BUILD_DIR)
 	python3 tests/integration/test_capacity.py $(BUILD_DIR)
+	python3 tests/integration/test_week3.py $(BUILD_DIR)
 
 coverage:
 	@if test -d build/coverage; then find build/coverage -type f -name '*.gcda' -delete; fi

@@ -140,6 +140,7 @@ const char *game_answer(Game *game, size_t slot, unsigned qid, char answer, int6
     }
     player->responded = 1;
     player->answered_at = now;
+    player->answer_order = ++game->response_order;
     player->correct = answer == game->questions[game->question_index].answer;
     return "200|RECEIVED\n";
 }

@@ -4,7 +4,9 @@ int score_fastest(const Player players[SESSION_LIMIT], int excluded) {
     int fastest = -1;
     for (int i = 0; i < SESSION_LIMIT; ++i) {
         if (i != excluded && players[i].active && players[i].correct &&
-            (fastest < 0 || players[i].answered_at < players[fastest].answered_at)) {
+            (fastest < 0 || players[i].answered_at < players[fastest].answered_at ||
+             (players[i].answered_at == players[fastest].answered_at &&
+              players[i].answer_order < players[fastest].answer_order))) {
             fastest = i;
         }
     }

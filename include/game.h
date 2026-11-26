@@ -16,6 +16,7 @@ typedef struct {
     size_t question_index;
     unsigned qid;
     unsigned attempts;
+    uint64_t response_order;
     int main_slot;
     int skipped;
     int64_t opened_at;

@@ -4,8 +4,46 @@
 #include "log.h"
 #include "protocol.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+static int game_emit(void *context, size_t slot, const char *line) {
+    Dispatcher *server = context;
+    const Session *session = &server->lobby.sessions[slot];
+    if (session->joined && strcmp(session->username, server->game.players[slot].username) == 0) {
+        return server->emit(server->context, slot, line);
+    }
+    return 0;
+}
+
+void dispatcher_tick(Dispatcher *server, int64_t now) {
+    server->now = now;
+    if (server->game.questions != NULL) {
+        game_tick(&server->game, now);
+        server->lobby.running = server->game.phase != GAME_IDLE;
+    }
+}
+
+static const char *play_command(Dispatcher *server, size_t slot, ProtocolMessage *message,
+                                int64_t now) {
+    char *end;
+    errno = 0;
+    unsigned long id = strtoul(message->fields[1], &end, 10);
+    if (errno != 0 || *end != '\0' || id == 0 || id > UINT_MAX || message->fields[1][0] < '0' ||
+        message->fields[1][0] > '9') {
+        return "400|BAD_REQUEST\n";
+    }
+    if (strcmp(message->fields[0], "SKIP") == 0) {
+        return game_skip(&server->game, slot, (unsigned)id, now);
+    }
+    if (strlen(message->fields[2]) != 1) {
+        return "400|BAD_REQUEST\n";
+    }
+    return game_answer(&server->game, slot, (unsigned)id, message->fields[2][0], now);
+}
 
 static void broadcast_line(Dispatcher *server, const char *line) {
     for (size_t i = 0; i < SESSION_LIMIT; ++i) {
@@ -60,6 +98,8 @@ void dispatcher_disconnect(Dispatcher *server, size_t slot) {
         }
     }
     session_logout(&server->lobby, slot);
+    game_leave(&server->game, slot, server->now);
+    dispatcher_tick(server, server->now);
     if (joined) {
         dispatcher_broadcast(server);
     }
@@ -109,13 +149,21 @@ static const char *handle(Dispatcher *server, size_t slot, ProtocolMessage *mess
         return "401|LOGIN_REQUIRED\n";
     }
     if (strcmp(command, "START") == 0) {
+        if (server->config->questions == NULL || server->config->question_count == 0) {
+            return "503|NO_QUESTIONS\n";
+        }
         return lobby_start(&server->lobby, slot);
+    }
+    if (strcmp(command, "ANSWER") == 0 || strcmp(command, "SKIP") == 0) {
+        return play_command(server, slot, message, now);
     }
     if (strcmp(command, "LEAVE") == 0) {
         lobby_leave(&server->lobby, slot);
     } else {
         session_logout(&server->lobby, slot);
     }
+    game_leave(&server->game, slot, now);
+    dispatcher_tick(server, now);
     return "200|OK\n";
 }
 
@@ -125,7 +173,8 @@ int dispatcher_command(Dispatcher *server, size_t slot, char *line, int64_t now)
     if (protocol_parse(line, &message) < 0) {
         return server->emit(server->context, slot, reply);
     }
-    const char *commands[] = {"REGISTER", "LOGIN", "PING", "JOIN", "START", "LEAVE", "LOGOUT"};
+    const char *commands[] = {"REGISTER", "LOGIN",  "PING",   "JOIN", "START",
+                              "LEAVE",    "LOGOUT", "ANSWER", "SKIP"};
     size_t index;
     for (index = 0; index < sizeof(commands) / sizeof(commands[0]); ++index) {
         if (strcmp(message.fields[0], commands[index]) == 0) {
@@ -135,9 +184,11 @@ int dispatcher_command(Dispatcher *server, size_t slot, char *line, int64_t now)
     if (index == sizeof(commands) / sizeof(commands[0])) {
         return server->emit(server->context, slot, "400|UNSUPPORTED_COMMAND\n");
     }
-    if (message.count != (index < 2 ? 3U : 1U)) {
+    size_t expected = index < 2 || index == 7 ? 3U : (index == 8 ? 2U : 1U);
+    if (message.count != expected) {
         return server->emit(server->context, slot, reply);
     }
+    server->now = now;
     server->lobby.sessions[slot].last_active = now;
     reply = handle(server, slot, &message, now);
     if (index < 2 || index == 6) {
@@ -149,8 +200,12 @@ int dispatcher_command(Dispatcher *server, size_t slot, char *line, int64_t now)
         }
     }
     int result = server->emit(server->context, slot, reply);
-    if (index >= 3 && strcmp(reply, "200|OK\n") == 0) {
+    if (index >= 3 && index <= 6 && strcmp(reply, "200|OK\n") == 0) {
         dispatcher_broadcast(server);
+    }
+    if (index == 4 && strcmp(reply, "200|OK\n") == 0) {
+        game_start(&server->game, &server->lobby, server->config->questions,
+                   server->config->question_count, now, game_emit, server);
     }
     return result;
 }

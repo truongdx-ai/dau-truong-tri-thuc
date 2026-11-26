@@ -68,13 +68,11 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
         a.expect("PLAYERS|2|an,tu")
         b.expect("PLAYERS|2|an,tu")
         command(b, "START", "403|NOT_HOST")
-        command(a, "START", "200|OK")
-        a.expect("PLAYERS|2|an,tu")
-        b.expect("PLAYERS|2|an,tu")
         command(c, "JOIN", "401|LOGIN_REQUIRED")
         command(a, "LEAVE", "200|OK")
         b.expect("PLAYERS|1|tu")
-        command(b, "JOIN", "409|GAME_RUNNING")
+        command(b, "JOIN", "200|OK")
+        b.expect("PLAYERS|1|tu")
         command(b, "LOGOUT", "200|OK")
         command(c, "LOGIN|tu|456", "200|OK")
         command(c, "JOIN", "200|OK")
@@ -108,6 +106,8 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
             assert client.stdout.readline().strip() == "200|OK"
             assert client.stdout.readline().strip() == "PLAYERS|2|tu,an"
             b.expect("PLAYERS|2|tu,an")
+            assert client.stdout.readline().startswith("QUESTION|")
+            assert b.reader.readline().startswith(b"QUESTION|")
             client.stdin.close()
             assert client.wait(timeout=5) == 0
         finally:
@@ -116,6 +116,7 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
                 client.wait(timeout=5)
             client.stdout.close()
             client.stderr.close()
+        assert b.reader.readline().startswith(b"GAME_OVER|WINNER|an|")
         b.expect("PLAYERS|1|an")
         log = (Path(directory) / "server.log").read_text()
         assert "LOGIN accepted" in log and "LOGIN rejected" in log

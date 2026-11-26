@@ -16,5 +16,7 @@ typedef struct {
 
 /* Read text|A|B|C|D|correct-letter records. On failure, count is zero. */
 int question_load(FILE *input, Question *questions, size_t capacity, size_t *count);
+/* Shuffle in place. Return -1 if the random source fails or count is unsupported. */
+int question_shuffle(Question *questions, size_t count);
 
 #endif

@@ -154,6 +154,15 @@ static void test_departure_counts_as_wrong(void) {
     TEST_ASSERT_EQUAL_INT(GAME_IDLE, game.phase);
 }
 
+static void test_first_received_answer_breaks_same_millisecond_tie(void) {
+    start();
+    game_answer(&game, 2, game.qid, 'A', 1);
+    game_answer(&game, 0, game.qid, 'A', 1);
+    game_answer(&game, 1, game.qid, 'A', 1);
+    game_tick(&game, 1);
+    TEST_ASSERT_EQUAL_INT(2, game.main_slot);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_correct_main_wins_and_next_game_resets_points);
@@ -162,5 +171,6 @@ int main(void) {
     RUN_TEST(test_answers_reject_stale_duplicate_invalid_and_late);
     RUN_TEST(test_qualification_retries_cancel_and_question_exhaustion);
     RUN_TEST(test_departure_counts_as_wrong);
+    RUN_TEST(test_first_received_answer_breaks_same_millisecond_tie);
     return UNITY_END();
 }
