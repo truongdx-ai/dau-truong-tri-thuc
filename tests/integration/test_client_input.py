@@ -46,10 +46,13 @@ with socket.socket() as listener:
                 with peer.makefile("rb") as stream:
                     assert stream.readline() == b"PING\n"
                     assert stream.readline() == b""
-                peer.sendall(b"PONG\n")
+                peer.sendall(b"PONG\nQUESTION|7|TURN|30|2 + 2?|1|2|3|4\n")
                 peer.shutdown(socket.SHUT_WR)
             assert client.wait(timeout=5) == 0
-            assert b"PONG\n" in client.stdout.read()
+            rendered = client.stdout.read()
+            assert b"PONG\n" in rendered
+            assert b"Cau hoi 7 (TURN, 30 giay)" in rendered
+            assert b"A) 1   B) 2   C) 3   D) 4" in rendered
         finally:
             if client.poll() is None:
                 client.terminate()
