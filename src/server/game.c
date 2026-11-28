@@ -207,10 +207,15 @@ static void evaluate(Game *game, int64_t now) {
             char line[128];
             snprintf(line, sizeof(line), "TURN_RESULT|%c|%s|%" PRId64 "\n",
                      game->questions[game->question_index].answer,
-                     game->players[i].correct ? "CORRECT" : "WRONG", game->players[i].points);
+                     (int)i == previous && action == SCORE_SKIP
+                         ? "SKIPPED"
+                         : (game->players[i].correct ? "CORRECT" : "WRONG"),
+                     game->players[i].points);
             game->emit(game->context, i, line);
             if (!game->players[i].active) {
-                game->emit(game->context, i, "ELIMINATED|WRONG_ANSWER\n");
+                game->emit(game->context, i,
+                           game->players[i].responded ? "ELIMINATED|WRONG_ANSWER\n"
+                                                      : "ELIMINATED|TIMEOUT\n");
             }
         }
     }

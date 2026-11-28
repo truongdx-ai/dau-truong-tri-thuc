@@ -54,7 +54,7 @@ static void test_correct_main_wins_and_next_game_resets_points(void) {
     game_tick(&game, 30003);
     TEST_ASSERT_EQUAL_INT(GAME_IDLE, game.phase);
     TEST_ASSERT_EQUAL_INT64(30, game.players[2].points);
-    TEST_ASSERT_NOT_NULL(strstr(events[0], "ELIMINATED|WRONG_ANSWER"));
+    TEST_ASSERT_NOT_NULL(strstr(events[0], "ELIMINATED|TIMEOUT"));
     TEST_ASSERT_NOT_NULL(strstr(events[1], "GAME_OVER|WINNER|player2|30"));
     unsigned previous = game.qid;
     TEST_ASSERT_EQUAL_INT(0, game_start(&game, &lobby, questions, 12, 40000, emit, NULL));
@@ -163,6 +163,28 @@ static void test_first_received_answer_breaks_same_millisecond_tie(void) {
     TEST_ASSERT_EQUAL_INT(2, game.main_slot);
 }
 
+static void test_skip_without_correct_subs_keeps_main_points(void) {
+    select_main();
+    TEST_ASSERT_EQUAL_STRING("200|OK\n", game_skip(&game, 2, game.qid, 4));
+    game_tick(&game, 30003);
+    TEST_ASSERT_EQUAL_INT(GAME_IDLE, game.phase);
+    TEST_ASSERT_EQUAL_INT64(10, game.players[2].points);
+    TEST_ASSERT_NOT_NULL(strstr(events[2], "TURN_RESULT|A|SKIPPED|10"));
+    TEST_ASSERT_NOT_NULL(strstr(events[2], "GAME_OVER|WINNER|player2|10"));
+}
+
+static void test_departed_main_cancels_pending_skip_and_all_wrong_loses(void) {
+    select_main();
+    game_skip(&game, 2, game.qid, 4);
+    game_leave(&game, 2, 5);
+    TEST_ASSERT_FALSE(game.skipped);
+    game_leave(&game, 0, 6);
+    game_tick(&game, 30003);
+    TEST_ASSERT_EQUAL_INT(GAME_IDLE, game.phase);
+    TEST_ASSERT_NOT_NULL(strstr(events[1], "GAME_OVER|NO_WINNER"));
+    TEST_ASSERT_EQUAL_UINT(0, game.players[2].skips);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_correct_main_wins_and_next_game_resets_points);
@@ -172,5 +194,7 @@ int main(void) {
     RUN_TEST(test_qualification_retries_cancel_and_question_exhaustion);
     RUN_TEST(test_departure_counts_as_wrong);
     RUN_TEST(test_first_received_answer_breaks_same_millisecond_tie);
+    RUN_TEST(test_skip_without_correct_subs_keeps_main_points);
+    RUN_TEST(test_departed_main_cancels_pending_skip_and_all_wrong_loses);
     return UNITY_END();
 }
