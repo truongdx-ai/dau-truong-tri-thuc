@@ -33,6 +33,7 @@ static void finish(Game *game, int winner, const char *reason) {
         snprintf(line, sizeof(line), "GAME_OVER|%s\n", reason);
     }
     game->phase = GAME_IDLE;
+    game_scoreboard(game);
     for (size_t i = 0; i < SESSION_LIMIT; ++i) {
         if (game->players[i].username[0] != '\0') {
             game->emit(game->context, i, line);
@@ -113,6 +114,7 @@ int game_start(Game *game, const Lobby *lobby, const Question *questions, size_t
         return -1;
     }
     open_question(game, now);
+    game_scoreboard(game);
     return 0;
 }
 
@@ -222,6 +224,7 @@ static void evaluate(Game *game, int64_t now) {
     if (active_count(game) < 2 || game->main_slot < 0) {
         finish(game, active_count(game) == 1 ? best_player(game) : -1, "NO_WINNER");
     } else {
+        game_scoreboard(game);
         send_roles(game);
         open_question(game, now);
     }

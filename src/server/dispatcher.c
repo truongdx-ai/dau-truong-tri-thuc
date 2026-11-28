@@ -10,10 +10,23 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void log_game_event(Dispatcher *server, size_t slot, const char *line) {
+    char event[256];
+    size_t length = strncmp(line, "QUESTION|", 9) == 0 ? 8 : strcspn(line, "\r\n");
+    snprintf(event, sizeof(event), "GAME user=%s qid=%u %.*s",
+             server->lobby.sessions[slot].username, server->game.qid, (int)length, line);
+    if (log_event(server->config->log, LOG_INFO, event) < 0) {
+        fputs("Could not write game log\n", stderr);
+    }
+}
+
 static int game_emit(void *context, size_t slot, const char *line) {
     Dispatcher *server = context;
     const Session *session = &server->lobby.sessions[slot];
     if (session->joined && strcmp(session->username, server->game.players[slot].username) == 0) {
+        if (strncmp(line, "SCORE", 5) != 0) {
+            log_game_event(server, slot, line);
+        }
         return server->emit(server->context, slot, line);
     }
     return 0;
@@ -97,6 +110,9 @@ void dispatcher_disconnect(Dispatcher *server, size_t slot) {
             fputs("Could not write session log\n", stderr);
         }
     }
+    if (server->game.phase != GAME_IDLE && server->game.players[slot].active) {
+        log_game_event(server, slot, "DISCONNECTED");
+    }
     session_logout(&server->lobby, slot);
     game_leave(&server->game, slot, server->now);
     dispatcher_tick(server, server->now);
@@ -158,8 +174,14 @@ static const char *handle(Dispatcher *server, size_t slot, ProtocolMessage *mess
         return play_command(server, slot, message, now);
     }
     if (strcmp(command, "LEAVE") == 0) {
+        if (server->game.phase != GAME_IDLE) {
+            log_game_event(server, slot, "LEAVE");
+        }
         lobby_leave(&server->lobby, slot);
     } else {
+        if (server->game.phase != GAME_IDLE) {
+            log_game_event(server, slot, "LOGOUT");
+        }
         session_logout(&server->lobby, slot);
     }
     game_leave(&server->game, slot, now);
@@ -191,10 +213,13 @@ int dispatcher_command(Dispatcher *server, size_t slot, char *line, int64_t now)
     server->now = now;
     server->lobby.sessions[slot].last_active = now;
     reply = handle(server, slot, &message, now);
-    if (index < 2 || index == 6) {
+    if (index < 2 || index == 4 || index == 6 || index >= 7) {
         char event[96];
         snprintf(event, sizeof(event), "%s %s", commands[index],
                  strcmp(reply, "200|OK\n") == 0 ? "accepted" : "rejected");
+        if (index >= 7 && strcmp(reply, "200|RECEIVED\n") == 0) {
+            snprintf(event, sizeof(event), "%s accepted", commands[index]);
+        }
         if (log_event(server->config->log, LOG_INFO, event) < 0) {
             fputs("Could not write authentication log\n", stderr);
         }

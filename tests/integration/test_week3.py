@@ -14,14 +14,22 @@ class Peer:
     def __init__(self, port):
         self.socket = socket.create_connection(("127.0.0.1", port), timeout=40)
         self.reader = self.socket.makefile("rb")
+        self.scores = {}
 
     def send(self, line):
         self.socket.sendall((line + "\n").encode())
 
     def read(self):
-        line = self.reader.readline().decode().strip()
-        assert line, "Server closed unexpectedly"
-        return line
+        while True:
+            line = self.reader.readline().decode().strip()
+            assert line, "Server closed unexpectedly"
+            if line.startswith("SCOREBOARD_BEGIN|"):
+                self.scores = {}
+            elif line.startswith("SCORE|"):
+                _, user, points, status = line.split("|")
+                self.scores[user] = (int(points), status)
+            elif not line.startswith("SCOREBOARD_END|"):
+                return line
 
     def expect(self, line):
         actual = self.read()
@@ -96,11 +104,20 @@ with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             peers[index].expect("GAME_OVER|WINNER|p1|30")
         peers[1].expect("TURN_RESULT|A|CORRECT|30")
         peers[1].expect("GAME_OVER|WINNER|p1|30")
+        for peer in peers:
+            assert peer.scores == {"p0": (0, "ELIMINATED"), "p1": (30, "ACTIVE"),
+                                   "p2": (0, "ELIMINATED")}
         # Same lobby can start another game with fresh points and fresh qids.
         peers[0].send("START")
         peers[0].expect("200|OK")
         next_question = peers[0].until("QUESTION|").split("|")
         assert int(next_question[1]) > int(turn_id)
+        log = (Path(directory) / "server.log").read_text()
+        for event in ("START accepted", "ANSWER accepted", "SKIP rejected",
+                      "QUESTION", "ROLE|MAIN", "TURN_RESULT|A|CORRECT|30",
+                      "ELIMINATED|WRONG_ANSWER", "GAME_OVER|WINNER|p1|30"):
+            assert event in log, event
+        assert "|pw" not in log
         print("Three-client qualification, main selection, timed scoring and restart passed")
     finally:
         server.terminate()

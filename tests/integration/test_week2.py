@@ -20,8 +20,14 @@ class Peer:
         self.socket.sendall((line + "\n").encode())
 
     def expect(self, line):
-        actual = self.reader.readline().decode().rstrip("\n")
+        actual = self.read()
         assert actual == line, (line, actual)
+
+    def read(self):
+        while True:
+            line = self.reader.readline().decode().rstrip("\n")
+            if not line.startswith(("SCOREBOARD_", "SCORE|")):
+                return line
 
     def close(self):
         self.reader.close()
@@ -116,7 +122,7 @@ with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack
                 client.wait(timeout=5)
             client.stdout.close()
             client.stderr.close()
-        assert b.reader.readline().startswith(b"GAME_OVER|WINNER|an|")
+        assert b.read().startswith("GAME_OVER|WINNER|an|")
         b.expect("PLAYERS|1|an")
         log = (Path(directory) / "server.log").read_text()
         assert "LOGIN accepted" in log and "LOGIN rejected" in log

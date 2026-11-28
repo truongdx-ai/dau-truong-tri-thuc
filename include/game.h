@@ -33,5 +33,6 @@ void game_tick(Game *game, int64_t now);
 void game_leave(Game *game, size_t slot, int64_t now);
 /* Milliseconds until the next game deadline, -1 while idle. */
 int game_poll_timeout(const Game *game, int64_t now);
+void game_scoreboard(Game *game);
 
 #endif
