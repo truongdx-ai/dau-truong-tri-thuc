@@ -36,6 +36,7 @@ test: all $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done
 	python3 tests/integration/test_week2.py $(BUILD_DIR)
 	python3 tests/integration/test_client_input.py $(BUILD_DIR)
+	python3 tests/integration/test_client_display.py $(BUILD_DIR)
 	python3 tests/integration/test_capacity.py $(BUILD_DIR)
 	python3 tests/integration/test_week3.py $(BUILD_DIR)
 

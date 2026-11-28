@@ -38,14 +38,16 @@ static int connect_server(const char *host, const char *port) {
     return fd;
 }
 
-static int64_t monotonic_seconds(void) {
+static int64_t monotonic_ms(void) {
     struct timespec now;
-    return clock_gettime(CLOCK_MONOTONIC, &now) == 0 ? now.tv_sec : -1;
+    return clock_gettime(CLOCK_MONOTONIC, &now) == 0
+               ? (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000
+               : -1;
 }
 
 static int transient(void) { return errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK; }
 
-static int receive_lines(int fd, Linebuf *buffer) {
+static int receive_lines(int fd, Linebuf *buffer, UiState *ui) {
     char bytes[4096];
     ssize_t count = recv(fd, bytes, sizeof(bytes), 0);
     if (count <= 0) {
@@ -54,7 +56,7 @@ static int receive_lines(int fd, Linebuf *buffer) {
     for (ssize_t i = 0; i < count; ++i) {
         LinebufResult result = linebuf_feed(buffer, bytes[i]);
         if (result == LINEBUF_READY) {
-            ui_message(buffer->data);
+            ui_receive(ui, buffer->data, monotonic_ms());
         } else if (result == LINEBUF_TOO_LONG) {
             return -1;
         }
@@ -95,11 +97,12 @@ static int read_input(char *output, size_t *length, Linebuf *input, int *invalid
 static int client_loop(int fd) {
     struct pollfd fds[] = {{.fd = fd, .events = POLLIN}, {.fd = STDIN_FILENO, .events = POLLIN}};
     Linebuf socket_input = {0}, input = {0};
+    UiState ui = {0};
     char output[LINEBUF_MAX];
     size_t length = 0, sent = 0;
     int eof = 0;
     int invalid = 0;
-    int64_t last_ping = monotonic_seconds();
+    int64_t last_ping = monotonic_ms();
     for (;;) {
         fds[0].events = POLLIN | (length > sent ? POLLOUT : 0);
         fds[1].events = !eof && length == sent ? POLLIN : 0;
@@ -113,7 +116,7 @@ static int client_loop(int fd) {
             return -1;
         }
         if (fds[0].revents & (POLLIN | POLLHUP)) {
-            int result = receive_lines(fd, &socket_input);
+            int result = receive_lines(fd, &socket_input, &ui);
             if (result <= 0) {
                 return result;
             }
@@ -141,8 +144,9 @@ static int client_loop(int fd) {
                 fds[1].fd = -1;
             }
         }
-        int64_t now = monotonic_seconds();
-        if (!eof && length == sent && now - last_ping >= 60) {
+        int64_t now = monotonic_ms();
+        ui_tick(&ui, now, isatty(STDERR_FILENO) ? stderr : NULL);
+        if (!eof && length == sent && now - last_ping >= 60000) {
             memcpy(output, "PING\n", 5);
             length = 5;
             sent = 0;
