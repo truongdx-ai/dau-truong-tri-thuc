@@ -97,16 +97,31 @@ with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
         for index, answer in ((0, "B"), (1, "A"), (2, "B")):
             peers[index].send(f"ANSWER|{turn_id}|{answer}")
             peers[index].expect("200|RECEIVED")
+        # A departing SUB still loses its points as a wrong answer. Reuse its slot.
+        peers[2].socket.shutdown(socket.SHUT_RDWR)
+        peers[2].close()
+        peers[0].expect("PLAYERS|2|p0,p1")
+        peers[1].expect("PLAYERS|2|p0,p1")
+        replacement = Peer(port)
+        stack.callback(replacement.close)
+        replacement.send("LOGIN|p2|pw")
+        replacement.expect("200|OK")
+        replacement.send("JOIN")
+        replacement.expect("409|GAME_RUNNING")
+        replacement.send(f"ANSWER|{turn_id}|A")
+        replacement.expect("403|NOT_ALLOWED")
         # SUB's window closes after 30 seconds, even when everyone answered.
-        for index in (0, 2):
+        for index in (0,):
             peers[index].expect("TURN_RESULT|A|WRONG|0")
             peers[index].expect("ELIMINATED|WRONG_ANSWER")
             peers[index].expect("GAME_OVER|WINNER|p1|30")
         peers[1].expect("TURN_RESULT|A|CORRECT|30")
         peers[1].expect("GAME_OVER|WINNER|p1|30")
-        for peer in peers:
+        for peer in peers[:2]:
             assert peer.scores == {"p0": (0, "ELIMINATED"), "p1": (30, "ACTIVE"),
-                                   "p2": (0, "ELIMINATED")}
+                                   "p2": (0, "DISCONNECTED")}
+        replacement.send("PING")
+        replacement.expect("PONG")  # No result from the previous session was queued here.
         # Same lobby can start another game with fresh points and fresh qids.
         peers[0].send("START")
         peers[0].expect("200|OK")
@@ -115,7 +130,8 @@ with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
         log = (Path(directory) / "server.log").read_text()
         for event in ("START accepted", "ANSWER accepted", "SKIP rejected",
                       "QUESTION", "ROLE|MAIN", "TURN_RESULT|A|CORRECT|30",
-                      "ELIMINATED|WRONG_ANSWER", "GAME_OVER|WINNER|p1|30"):
+                      "ELIMINATED|WRONG_ANSWER", "GAME_OVER|WINNER|p1|30",
+                      "GAME user=p2", "DISCONNECTED"):
             assert event in log, event
         assert "|pw" not in log
         print("Three-client qualification, main selection, timed scoring and restart passed")

@@ -58,11 +58,30 @@ static void test_no_correct_subs(void) {
     TEST_ASSERT_EQUAL_INT64(40, players[0].points);
 }
 
+static void test_100_player_skip_preserves_points_and_assigns_remainder(void) {
+    int64_t total_before = 997, total_after = 0;
+    for (int i = 0; i < SESSION_LIMIT; ++i) {
+        players[i] = (Player){.active = 1, .points = 10, .correct = i % 3 == 0, .answered_at = i};
+    }
+    players[99].points = 997;
+    total_before += 99 * 10;
+    TEST_ASSERT_EQUAL_INT(99, score_apply(players, 99, SCORE_SKIP));
+    for (int i = 0; i < SESSION_LIMIT; ++i) {
+        TEST_ASSERT_TRUE(players[i].points >= 0);
+        total_after += players[i].points;
+    }
+    TEST_ASSERT_EQUAL_INT64(total_before, total_after);
+    TEST_ASSERT_EQUAL_INT64(499, players[99].points);
+    TEST_ASSERT_EQUAL_INT64(48, players[0].points);
+    TEST_ASSERT_EQUAL_INT64(45, players[3].points);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_main_correct_collects_eliminated_points);
     RUN_TEST(test_main_wrong_splits_only_main_points_and_selects_fastest);
     RUN_TEST(test_skip_splits_half_and_wrong_sub_points_with_remainder);
     RUN_TEST(test_no_correct_subs);
+    RUN_TEST(test_100_player_skip_preserves_points_and_assigns_remainder);
     return UNITY_END();
 }
