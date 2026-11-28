@@ -1,4 +1,4 @@
-# Giao thức Đấu trường tri thức v0.3
+# Giao thức Đấu trường tri thức v0.4
 
 Server và client trao đổi qua TCP. Mỗi thông điệp là một dòng kết thúc bằng
 LF (\n), có thể kèm CR trước LF khi nhập từ terminal. Giới hạn là 1024 byte
@@ -52,7 +52,7 @@ GAME_OVER|NO_WINNER
 PLAYERS được gửi khi danh sách phòng chờ thay đổi. QUESTION có loại QUALIFY
 hoặc TURN và trường số giây dành cho người nhận. ROLE được gửi sau vòng
 loại hoặc khi đổi người chơi chính. TURN_RESULT chứa đáp án đúng, trạng
-thái CORRECT hoặc WRONG và điểm của người nhận.
+thái CORRECT, WRONG hoặc SKIPPED và điểm của người nhận.
 
 ## Phiên và phòng chờ
 
@@ -97,3 +97,28 @@ thì gửi GAME_OVER|CANCELLED. Hết lượt, TURN_RESULT đi trước ELIMINAT
 GAME_OVER gửi cho thành viên ván vẫn ở phòng, gồm cả người đã bị loại.
 Sau khi kết thúc có thể START lại. qid tăng qua các ván để từ chối đáp án
 trễ từ ván cũ. Nếu không có ngân hàng câu hỏi, START nhận 503 NO_QUESTIONS.
+
+## Bảng điểm và kết thúc ván
+
+Server gửi một ảnh chụp bảng điểm theo dạng sau:
+
+```text
+SCOREBOARD_BEGIN|7
+SCORE|an|30|ACTIVE
+SCORE|tu|0|ELIMINATED
+SCORE|chi|0|DISCONNECTED
+SCOREBOARD_END|7
+```
+
+Mỗi SCORE là một dòng riêng, gồm tên, điểm và trạng thái. SCOREBOARD_END
+có cùng qid với BEGIN đánh dấu bảng điểm hoàn chỉnh.
+Bảng có tối đa 100 người và mỗi dòng tuân theo giới hạn 1024 byte.
+
+Bảng điểm được gửi sau QUESTION đầu ván, sau TURN_RESULT và ELIMINATED
+ở mỗi lượt, trước ROLE hoặc QUESTION kế tiếp hay GAME_OVER. Người đã bị
+loại và vẫn ở phòng tiếp tục nhận bảng điểm. Người đã rời hoặc phiên mới
+dùng lại khe kết nối không nhận dữ liệu của phiên trước.
+
+MAIN đã SKIP nhận TURN_RESULT có trạng thái SKIPPED. Khi không trả lời
+và bị loại, lý do trong ELIMINATED là TIMEOUT. Đáp án sai nhận WRONG_ANSWER.
+Các dòng GAME_OVER|WINNER, NO_WINNER hoặc CANCELLED được giữ nguyên.

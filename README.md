@@ -107,6 +107,31 @@ nối trong lượt được xử lý như trả lời sai.
 `make test` gồm đồng hồ giả cho 30/60 giây và kịch bản ba client qua
 TCP chạy một lượt 30 giây thật, vì vậy test và coverage cần thêm thời gian.
 
+## Bản hoàn thiện Tuần 4
+
+Client hiển thị bảng điểm ở đầu ván, sau mỗi lượt và khi ván kết thúc.
+Bảng điểm gồm tên, điểm và trạng thái ACTIVE, ELIMINATED hoặc DISCONNECTED.
+MAIN bỏ qua nhận kết quả SKIPPED. Người hết thời gian nhận
+ELIMINATED với lý do TIMEOUT.
+
+Khi chạy trong terminal, client hiển thị đếm ngược trên stderr. Đồng hồ
+bắt đầu khi nhận QUESTION, server quyết định thời điểm hết hạn. Khi chuyển
+đầu ra sang file hoặc chạy test qua pipe, các dòng giao thức và kết quả vẫn
+được giữ, countdown chỉ xuất hiện nếu stderr là terminal.
+
+Log ghi nhận START, ANSWER, SKIP và các sự kiện QUESTION, ROLE,
+TURN_RESULT, ELIMINATED, GAME_OVER. Tên người chơi và qid giúp đối chiếu
+diễn biến, mật khẩu và nội dung câu hỏi không được ghi vào log game.
+
+Các regression gồm MAIN mất kết nối sau SKIP, SKIP không có SUB đúng,
+tính điểm dư cho 100 người và việc đăng nhập lại vào khe kết nối đã dùng.
+Phiên đăng nhập lại không nhận kết quả của phiên cũ. Kịch bản TCP kiểm
+tra điểm cuối cùng và bảng điểm của các client.
+
+Tag `v0.9.0` đánh dấu mốc chức năng Tuần 4 sau khi CI đạt. Phần kiểm
+thử chịu tải và báo cáo L1–L5 thuộc Tuần 5. Nhóm cần chạy demo với người
+ngoài nhóm theo kế hoạch và review trước khi merge vào main.
+
 ## Hook kiểm tra khoảng cách commit
 
 Chạy một lần trong mỗi bản sao repo:
